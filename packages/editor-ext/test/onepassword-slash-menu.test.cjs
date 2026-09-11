@@ -80,7 +80,9 @@ test('insert uses ONEPASSWORD_LABEL + exact href (no normalize)', () => {
   assert.ok(insert.includes('ONEPASSWORD_LABEL'));
   assert.ok(insert.includes('isOnePasswordItemUrl'));
   assert.ok(!insert.includes('normalizeUrl'));
-  assert.ok(insert.includes('linkType.create({ href: permalink })'));
+  assert.ok(insert.includes('href: permalink'));
+  assert.ok(insert.includes('onePasswordCreateDateAttrs'));
+  assert.ok(insert.includes('linkType.create({'));
 });
 
 test('icon uses local logo asset', () => {

@@ -5,6 +5,7 @@ import {
   ONEPASSWORD_LABEL,
   ONEPASSWORD_NATIVE_BUILD_HINT,
   ONEPASSWORD_SMART_LINKS_MARKER,
+  datesForTitleRewrite,
   shouldRewriteOnePasswordTitle,
 } from './onepassword-smart-links';
 
@@ -13,6 +14,12 @@ export {
   isRawUrlTitle,
   nextVisibleText,
   shouldRewriteOnePasswordTitle,
+  nowUtcIso,
+  onePasswordCreateDateAttrs,
+  onePasswordHrefUpdateDateAttrs,
+  datesForTitleRewrite,
+  formatOnePasswordDateFr,
+  onePasswordTooltipLabel,
   ONEPASSWORD_LABEL,
   ONEPASSWORD_LABEL_LEGACY,
   ONEPASSWORD_LABEL_LEGACY_EMOJI,
@@ -35,6 +42,28 @@ export const LinkExtension = TiptapLink.extend({
           element.getAttribute('data-internal') === 'true',
         renderHTML: (attributes) =>
           attributes.internal ? { 'data-internal': 'true' } : {},
+      },
+      onePasswordCreatedAt: {
+        default: null,
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('data-onepassword-created-at'),
+        renderHTML: (attributes) =>
+          attributes.onePasswordCreatedAt
+            ? {
+                'data-onepassword-created-at': attributes.onePasswordCreatedAt,
+              }
+            : {},
+      },
+      onePasswordUpdatedAt: {
+        default: null,
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('data-onepassword-updated-at'),
+        renderHTML: (attributes) =>
+          attributes.onePasswordUpdatedAt
+            ? {
+                'data-onepassword-updated-at': attributes.onePasswordUpdatedAt,
+              }
+            : {},
       },
     };
   },
@@ -113,6 +142,7 @@ export const LinkExtension = TiptapLink.extend({
         },
       }),
       // OnePassword smart links — appendTransaction-only mutations (V1.2)
+      // Phase 2.1: stamp create dates on first raw-URL → label rewrite only.
       new Plugin({
         key: new PluginKey(ONEPASSWORD_SMART_LINKS_MARKER),
         appendTransaction(transactions, _oldState, newState) {
@@ -130,8 +160,15 @@ export const LinkExtension = TiptapLink.extend({
           const linkType = newState.schema.marks.link;
           if (!linkType) return;
 
-          const hits: { from: number; to: number; marks: readonly import('@tiptap/pm/model').Mark[] }[] =
-            [];
+          const hits: {
+            from: number;
+            to: number;
+            marks: readonly import('@tiptap/pm/model').Mark[];
+            text: string;
+            href: string;
+            createdAt: string | null;
+            updatedAt: string | null;
+          }[] = [];
 
           newState.doc.descendants((node, pos) => {
             if (!node.isText) return;
@@ -145,6 +182,10 @@ export const LinkExtension = TiptapLink.extend({
               from: pos,
               to: pos + node.nodeSize,
               marks: node.marks,
+              text: node.text || '',
+              href,
+              createdAt: (mark.attrs?.onePasswordCreatedAt as string) ?? null,
+              updatedAt: (mark.attrs?.onePasswordUpdatedAt as string) ?? null,
             });
           });
 
@@ -154,11 +195,24 @@ export const LinkExtension = TiptapLink.extend({
           tr.setMeta(ONEPASSWORD_SMART_LINKS_MARKER, true);
           for (let i = hits.length - 1; i >= 0; i--) {
             const h = hits[i];
-            // Preserve marks/attrs byte-intact (href, target, rel, …)
+            const dateStamp = datesForTitleRewrite({
+              text: h.text,
+              href: h.href,
+              createdAt: h.createdAt,
+              updatedAt: h.updatedAt,
+            });
+            const nextMarks = h.marks.map((m) => {
+              if (m.type !== linkType) return m;
+              if (!dateStamp) return m;
+              return linkType.create({
+                ...m.attrs,
+                ...dateStamp,
+              });
+            });
             tr.replaceWith(
               h.from,
               h.to,
-              newState.schema.text(ONEPASSWORD_LABEL, h.marks),
+              newState.schema.text(ONEPASSWORD_LABEL, nextMarks),
             );
           }
           return tr.docChanged ? tr : undefined;

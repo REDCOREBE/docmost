@@ -28,7 +28,16 @@ import { usePageQuery } from "@/features/page/queries/page-query.ts";
 import { useSharePageQuery } from "@/features/share/queries/share-query.ts";
 import { buildSharedPageUrl } from "@/features/page/page.utils.ts";
 import { extractPageSlugId } from "@/lib";
-import { sanitizeUrl, copyToClipboard, isEditorReady } from "@docmost/editor-ext";
+import {
+  sanitizeUrl,
+  copyToClipboard,
+  isEditorReady,
+  isOnePasswordItemUrl,
+  nowUtcIso,
+  onePasswordCreateDateAttrs,
+  onePasswordHrefUpdateDateAttrs,
+  onePasswordTooltipLabel,
+} from "@docmost/editor-ext";
 import { normalizeUrl } from "@/lib/utils";
 
 const parseInternalLink = (
@@ -159,11 +168,36 @@ export default function LinkView(props: MarkViewProps) {
         const from = pos;
         const to = pos + node.nodeSize;
         const { tr } = state;
+        const hrefChanged = normalizedUrl !== href;
+        const wasOp = isOnePasswordItemUrl(href);
+        const isOp = isOnePasswordItemUrl(normalizedUrl);
+        let dateAttrs: {
+          onePasswordCreatedAt: string | null;
+          onePasswordUpdatedAt: string | null;
+        } = {
+          onePasswordCreatedAt: linkMark.attrs.onePasswordCreatedAt ?? null,
+          onePasswordUpdatedAt: linkMark.attrs.onePasswordUpdatedAt ?? null,
+        };
+        if (isOp && hrefChanged) {
+          dateAttrs = wasOp
+            ? onePasswordHrefUpdateDateAttrs(dateAttrs)
+            : onePasswordCreateDateAttrs(nowUtcIso());
+        } else if (!isOp) {
+          dateAttrs = {
+            onePasswordCreatedAt: null,
+            onePasswordUpdatedAt: null,
+          };
+        }
         tr.removeMark(from, to, linkMark.type);
         tr.addMark(
           from,
           to,
-          linkMark.type.create({ href: normalizedUrl, internal: !!internal }),
+          linkMark.type.create({
+            ...linkMark.attrs,
+            href: normalizedUrl,
+            internal: !!internal,
+            ...dateAttrs,
+          }),
         );
         editor.view.dispatch(tr);
       }
@@ -327,6 +361,14 @@ export default function LinkView(props: MarkViewProps) {
       : normalizeUrl(href),
   );
 
+  const isOnePasswordLink = isOnePasswordItemUrl(href);
+  const onePasswordTooltip = isOnePasswordLink
+    ? onePasswordTooltipLabel(
+        mark.attrs.onePasswordCreatedAt,
+        mark.attrs.onePasswordUpdatedAt,
+      )
+    : null;
+
   const linkTitleInput = (
     <>
       <Text size="xs" fw={600} c="dimmed" mt="sm" mb={4}>
@@ -390,15 +432,45 @@ export default function LinkView(props: MarkViewProps) {
           className={classes.linkWrapper}
           onClick={handleClick}
         >
-          <a
-            href={displayHref}
-            spellCheck={false}
-            onClick={(e) => e.preventDefault()}
-            target={isInternal ? undefined : "_blank"}
-            rel={isInternal ? undefined : "noopener noreferrer"}
-          >
-            <MarkViewContent />
-          </a>
+          {isOnePasswordLink && onePasswordTooltip ? (
+            <Tooltip
+              label={
+                <span style={{ whiteSpace: "pre-line" }}>
+                  {onePasswordTooltip}
+                </span>
+              }
+              multiline
+              withArrow
+              openDelay={400}
+              withinPortal
+            >
+              <a
+                href={displayHref}
+                spellCheck={false}
+                onClick={(e) => e.preventDefault()}
+                target={isInternal ? undefined : "_blank"}
+                rel={isInternal ? undefined : "noopener noreferrer"}
+                data-onepassword-created-at={
+                  mark.attrs.onePasswordCreatedAt || undefined
+                }
+                data-onepassword-updated-at={
+                  mark.attrs.onePasswordUpdatedAt || undefined
+                }
+              >
+                <MarkViewContent />
+              </a>
+            </Tooltip>
+          ) : (
+            <a
+              href={displayHref}
+              spellCheck={false}
+              onClick={(e) => e.preventDefault()}
+              target={isInternal ? undefined : "_blank"}
+              rel={isInternal ? undefined : "noopener noreferrer"}
+            >
+              <MarkViewContent />
+            </a>
+          )}
         </span>
       </Popover.Target>
 
