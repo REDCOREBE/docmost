@@ -1,6 +1,27 @@
 import TiptapLink from '@tiptap/extension-link';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { EditorView } from '@tiptap/pm/view';
+import {
+  ONEPASSWORD_LABEL,
+  ONEPASSWORD_NATIVE_BUILD_HINT,
+  ONEPASSWORD_SMART_LINKS_MARKER,
+  shouldRewriteOnePasswordTitle,
+} from './onepassword-smart-links';
+
+export {
+  isOnePasswordItemUrl,
+  isRawUrlTitle,
+  nextVisibleText,
+  shouldRewriteOnePasswordTitle,
+  ONEPASSWORD_LABEL,
+  ONEPASSWORD_LABEL_LEGACY,
+  ONEPASSWORD_LABEL_LEGACY_EMOJI,
+  ONEPASSWORD_SMART_LINKS_MARKER,
+  ONEPASSWORD_NATIVE_BUILD_HINT,
+} from './onepassword-smart-links';
+
+// Keep marker string referenced so it survives minification for smoke greps.
+void ONEPASSWORD_NATIVE_BUILD_HINT;
 
 export const LinkExtension = TiptapLink.extend({
   inclusive: false,
@@ -89,6 +110,58 @@ export const LinkExtension = TiptapLink.extend({
             view.dispatch(tr.scrollIntoView());
             return true;
           },
+        },
+      }),
+      // OnePassword smart links — appendTransaction-only mutations (V1.2)
+      new Plugin({
+        key: new PluginKey(ONEPASSWORD_SMART_LINKS_MARKER),
+        appendTransaction(transactions, _oldState, newState) {
+          if (!transactions.some((tr) => tr.docChanged)) return;
+          if (
+            transactions.some(
+              (tr) =>
+                tr.getMeta(ONEPASSWORD_SMART_LINKS_MARKER) ||
+                tr.getMeta('history$'),
+            )
+          ) {
+            return;
+          }
+
+          const linkType = newState.schema.marks.link;
+          if (!linkType) return;
+
+          const hits: { from: number; to: number; marks: readonly import('@tiptap/pm/model').Mark[] }[] =
+            [];
+
+          newState.doc.descendants((node, pos) => {
+            if (!node.isText) return;
+            const mark = linkType.isInSet(node.marks);
+            if (!mark) return;
+            const href = mark.attrs?.href as string | undefined;
+            if (!href || !shouldRewriteOnePasswordTitle(node.text, href)) {
+              return;
+            }
+            hits.push({
+              from: pos,
+              to: pos + node.nodeSize,
+              marks: node.marks,
+            });
+          });
+
+          if (!hits.length) return;
+
+          const tr = newState.tr;
+          tr.setMeta(ONEPASSWORD_SMART_LINKS_MARKER, true);
+          for (let i = hits.length - 1; i >= 0; i--) {
+            const h = hits[i];
+            // Preserve marks/attrs byte-intact (href, target, rel, …)
+            tr.replaceWith(
+              h.from,
+              h.to,
+              newState.schema.text(ONEPASSWORD_LABEL, h.marks),
+            );
+          }
+          return tr.docChanged ? tr : undefined;
         },
       }),
     ];
