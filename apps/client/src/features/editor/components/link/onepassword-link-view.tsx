@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import {
-  ActionIcon,
   Button,
   Group,
   Popover,
@@ -174,15 +173,17 @@ export default function OnePasswordLinkView(props: NodeViewProps) {
                 Créé : {createdAt}
               </Text>
             ) : null}
-            <Group justify="space-between" gap="xs">
-              <ActionIcon
-                variant="subtle"
-                aria-label="Ouvrir le lien"
+            <Group justify="space-between" gap="xs" wrap="nowrap">
+              <Button
+                variant="light"
+                color="blue"
+                size="xs"
+                leftSection={<IconExternalLink size={14} />}
                 onClick={() => openHref()}
               >
-                <IconExternalLink size={16} />
-              </ActionIcon>
-              <Group gap="xs">
+                Ouvrir
+              </Button>
+              <Group gap="xs" wrap="nowrap">
                 <Button variant="default" size="xs" onClick={() => setOpened(false)}>
                   Annuler
                 </Button>
