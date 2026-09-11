@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { REDCORE_AICHAT_V39_CLIENT_NATIVE } from "../constants/redcore-aichat-v39";
 import { sendChatMessage } from "../services/ai-chat-service";
 import type {
   AiChatMessage,
@@ -13,6 +14,19 @@ import type {
 type ChatStreamOptions = {
   onChatCreated?: (chatId: string) => void;
 };
+
+/** V3.9: 4th arg may be contextPageId string or a context object (Hub inject parity). */
+export type SendMessageContext =
+  | string
+  | {
+      contextPageId?: string;
+      contextSpaceId?: string;
+      contextSpaceSlug?: string;
+    };
+
+// Keep marker in the production client bundle for patch-aichat-v39 skip-when-native.
+(globalThis as Record<string, unknown>)[REDCORE_AICHAT_V39_CLIENT_NATIVE] =
+  REDCORE_AICHAT_V39_CLIENT_NATIVE;
 
 export function useChatStream(
   chatId: string | undefined,
@@ -59,7 +73,12 @@ export function useChatStream(
   }, []);
 
   const sendMessage = useCallback(
-    (content: string, mentions: PageMention[] = [], attachments: ChatAttachment[] = [], contextPageId?: string) => {
+    (
+      content: string,
+      mentions: PageMention[] = [],
+      attachments: ChatAttachment[] = [],
+      context?: SendMessageContext,
+    ) => {
       if (isStreaming || (!content.trim() && attachments.length === 0)) return;
 
       setError(null);
@@ -68,6 +87,17 @@ export function useChatStream(
       setIsStreaming(true);
       setStreamingContent("");
       setStreamingToolCalls([]);
+
+      let contextPageId: string | undefined;
+      let contextSpaceId: string | undefined;
+      let contextSpaceSlug: string | undefined;
+      if (typeof context === "string") {
+        if (context) contextPageId = context;
+      } else if (context && typeof context === "object") {
+        if (context.contextPageId) contextPageId = context.contextPageId;
+        if (context.contextSpaceId) contextSpaceId = context.contextSpaceId;
+        if (context.contextSpaceSlug) contextSpaceSlug = context.contextSpaceSlug;
+      }
 
       const metadata: Record<string, unknown> = {};
       if (mentions.length) {
@@ -101,6 +131,8 @@ export function useChatStream(
           content,
           mentionedPageIds: mentions.map((m) => m.id),
           ...(contextPageId && { contextPageId }),
+          ...(contextSpaceId && { contextSpaceId }),
+          ...(contextSpaceSlug && { contextSpaceSlug }),
           ...(attachmentIds.length && { attachmentIds }),
         },
         (event: AiChatStreamEvent) => {

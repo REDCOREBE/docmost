@@ -63,6 +63,8 @@ export function sendChatMessage(
     content: string;
     mentionedPageIds?: string[];
     contextPageId?: string;
+    contextSpaceId?: string;
+    contextSpaceSlug?: string;
     attachmentIds?: string[];
   },
   onEvent: (event: AiChatStreamEvent) => void,

@@ -37,7 +37,7 @@ export default function AsideChatPanel() {
   const [chatId, setChatId] = useState<string | undefined>(undefined);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [contextPages, setContextPages] = useState<PageMention[]>([]);
-  const { pageSlug } = useParams();
+  const { pageSlug, spaceSlug } = useParams();
   const slugId = extractPageSlugId(pageSlug);
   const { data: page } = usePageQuery({ pageId: slugId });
 
@@ -57,11 +57,23 @@ export default function AsideChatPanel() {
     },
   });
 
+  // V3.6 seed semantics (native): keep current page in contextPages when viewing a page
   useEffect(() => {
-    if (page && !chatId) {
-      setContextPages([{ id: page.id, title: page.title || "", slugId: page.slugId }]);
+    if (page) {
+      setContextPages((prev) =>
+        prev.some((p) => p.id === page.id)
+          ? prev
+          : [
+              {
+                id: page.id,
+                title: page.title || "",
+                slugId: page.slugId,
+              },
+              ...prev,
+            ],
+      );
     }
-  }, [page, chatId]);
+  }, [page]);
 
   const handleRemoveContextPage = useCallback((pageId: string) => {
     setContextPages((prev) => prev.filter((p) => p.id !== pageId));
@@ -121,12 +133,26 @@ export default function AsideChatPanel() {
     setAsideState({ tab: "", isAsideOpen: false });
   }, [setAsideState]);
 
+  // V3.9 space context (native): same payload as Hub minified inject
   const handleSend = useCallback(
     (content: string, mentions: PageMention[], attachments: ChatAttachment[]) => {
-      const contextPageId = contextPages.length > 0 ? contextPages[0].id : undefined;
-      sendMessage(content, mentions, attachments, contextPageId);
+      const contextPageId =
+        page?.id || (contextPages.length > 0 ? contextPages[0].id : undefined);
+      let mergedMentions = mentions || [];
+      if (contextPages.length) {
+        for (const ctx of contextPages) {
+          if (!mergedMentions.some((m) => m.id === ctx.id)) {
+            mergedMentions = [...mergedMentions, ctx];
+          }
+        }
+      }
+      sendMessage(content, mergedMentions, attachments, {
+        contextPageId,
+        contextSpaceId: page?.spaceId || page?.space?.id || undefined,
+        contextSpaceSlug: spaceSlug || page?.space?.slug || undefined,
+      });
     },
-    [sendMessage, contextPages],
+    [sendMessage, contextPages, page, spaceSlug],
   );
 
   const handleQuickAction = useCallback(
