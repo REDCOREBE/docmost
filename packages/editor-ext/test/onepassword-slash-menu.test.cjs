@@ -76,13 +76,14 @@ test('popup copy + validation message', () => {
   assert.ok(form.includes('closeOnEscape'));
 });
 
-test('insert uses ONEPASSWORD_LABEL + exact href (no normalize)', () => {
-  assert.ok(insert.includes('ONEPASSWORD_LABEL'));
+test('insert uses onePasswordLink node + exact href (no normalize)', () => {
   assert.ok(insert.includes('isOnePasswordItemUrl'));
   assert.ok(!insert.includes('normalizeUrl'));
-  assert.ok(insert.includes('href: permalink'));
   assert.ok(insert.includes('onePasswordCreateDateAttrs'));
-  assert.ok(insert.includes('linkType.create({'));
+  assert.ok(insert.includes('onePasswordLink'));
+  assert.ok(insert.includes('opType.create'));
+  assert.ok(!insert.includes('linkType.create'));
+  assert.ok(!insert.includes('ONEPASSWORD_LABEL'));
 });
 
 test('icon uses local logo asset', () => {

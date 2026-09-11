@@ -2,11 +2,10 @@ import TiptapLink from '@tiptap/extension-link';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { EditorView } from '@tiptap/pm/view';
 import {
-  ONEPASSWORD_LABEL,
   ONEPASSWORD_NATIVE_BUILD_HINT,
   ONEPASSWORD_SMART_LINKS_MARKER,
   datesForTitleRewrite,
-  shouldRewriteOnePasswordTitle,
+  shouldConvertToOnePasswordLinkNode,
 } from './onepassword-smart-links';
 
 export {
@@ -14,6 +13,8 @@ export {
   isRawUrlTitle,
   nextVisibleText,
   shouldRewriteOnePasswordTitle,
+  shouldConvertToOnePasswordLinkNode,
+  ONEPASSWORD_MIGRATE_LABELS,
   nowUtcIso,
   onePasswordCreateDateAttrs,
   onePasswordHrefUpdateDateAttrs,
@@ -26,6 +27,11 @@ export {
   ONEPASSWORD_SMART_LINKS_MARKER,
   ONEPASSWORD_NATIVE_BUILD_HINT,
 } from './onepassword-smart-links';
+
+export {
+  OnePasswordLink,
+  convertOnePasswordLinkNodesToLinkMarks,
+} from './onepassword-link';
 
 // Keep marker string referenced so it survives minification for smoke greps.
 void ONEPASSWORD_NATIVE_BUILD_HINT;
@@ -141,8 +147,8 @@ export const LinkExtension = TiptapLink.extend({
           },
         },
       }),
-      // OnePassword smart links — appendTransaction-only mutations (V1.2)
-      // Phase 2.1: stamp create dates on first raw-URL → label rewrite only.
+      // OnePassword smart links — Phase 7: soft-convert text+link → atom node
+      // Only explicit legacy labels / raw URL titles (never custom titles).
       new Plugin({
         key: new PluginKey(ONEPASSWORD_SMART_LINKS_MARKER),
         appendTransaction(transactions, _oldState, newState) {
@@ -158,12 +164,12 @@ export const LinkExtension = TiptapLink.extend({
           }
 
           const linkType = newState.schema.marks.link;
-          if (!linkType) return;
+          const opNodeType = newState.schema.nodes.onePasswordLink;
+          if (!linkType || !opNodeType) return;
 
           const hits: {
             from: number;
             to: number;
-            marks: readonly import('@tiptap/pm/model').Mark[];
             text: string;
             href: string;
             createdAt: string | null;
@@ -175,13 +181,15 @@ export const LinkExtension = TiptapLink.extend({
             const mark = linkType.isInSet(node.marks);
             if (!mark) return;
             const href = mark.attrs?.href as string | undefined;
-            if (!href || !shouldRewriteOnePasswordTitle(node.text, href)) {
+            if (
+              !href ||
+              !shouldConvertToOnePasswordLinkNode(node.text || '', href)
+            ) {
               return;
             }
             hits.push({
               from: pos,
               to: pos + node.nodeSize,
-              marks: node.marks,
               text: node.text || '',
               href,
               createdAt: (mark.attrs?.onePasswordCreatedAt as string) ?? null,
@@ -201,18 +209,16 @@ export const LinkExtension = TiptapLink.extend({
               createdAt: h.createdAt,
               updatedAt: h.updatedAt,
             });
-            const nextMarks = h.marks.map((m) => {
-              if (m.type !== linkType) return m;
-              if (!dateStamp) return m;
-              return linkType.create({
-                ...m.attrs,
-                ...dateStamp,
-              });
-            });
             tr.replaceWith(
               h.from,
               h.to,
-              newState.schema.text(ONEPASSWORD_LABEL, nextMarks),
+              opNodeType.create({
+                href: h.href,
+                onePasswordCreatedAt:
+                  dateStamp?.onePasswordCreatedAt ?? h.createdAt,
+                onePasswordUpdatedAt:
+                  dateStamp?.onePasswordUpdatedAt ?? h.updatedAt,
+              }),
             );
           }
           return tr.docChanged ? tr : undefined;

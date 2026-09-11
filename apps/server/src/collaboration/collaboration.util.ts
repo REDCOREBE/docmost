@@ -40,6 +40,7 @@ import {
   Columns,
   Column,
   Status,
+  OnePasswordLink,
   addUniqueIdsToDoc,
   htmlToMarkdown,
   TransclusionSource,
@@ -108,6 +109,7 @@ export const tiptapExtensions = [
   Columns,
   Column,
   Status,
+  OnePasswordLink,
   TransclusionSource,
   TransclusionReference,
   BaseEmbed

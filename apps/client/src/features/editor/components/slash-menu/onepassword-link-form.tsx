@@ -15,7 +15,7 @@ type OnePasswordLinkFormProps = {
   onCancel: () => void;
 };
 
-/** Docmost-native permalink form (Modal body) — link mark only, never an embed. */
+/** Docmost-native permalink form (Modal body) — inserts atomic onePasswordLink node. */
 export function OnePasswordLinkForm({
   onSubmit,
   onCancel,

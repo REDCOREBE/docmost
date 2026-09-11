@@ -2,9 +2,10 @@
  * Redcore — OnePassword Smart Links (source-native)
  * Runtime marker: REDCORE_ONEPASSWORD_SMART_LINKS_NATIVE
  *
- * Standard link mark only. No CDN / no fetch to 1Password.
- * Mutations ONLY via appendTransaction (V1.2 semantics).
- * Phase 2.1 — optional date metadata on link mark attrs.
+ * Phase 7 — atomic onePasswordLink node (soft-migrate from text+link mark).
+ * No CDN / no fetch to 1Password.
+ * Mark→node conversions ONLY via appendTransaction.
+ * Phase 2.1 — optional date metadata attrs.
  */
 
 export const ONEPASSWORD_SMART_LINKS_MARKER =
@@ -69,7 +70,31 @@ function stripLeadEmoji(text: string): string {
   return text.replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, '');
 }
 
-/** Whether appendTransaction should rewrite this link's visible text. */
+/**
+ * Explicit legacy / canonical titles eligible for soft mark→node migration.
+ * Custom titles are NEVER converted.
+ */
+export const ONEPASSWORD_MIGRATE_LABELS: readonly string[] = [
+  ONEPASSWORD_LABEL,
+  ONEPASSWORD_LABEL_LEGACY,
+  ONEPASSWORD_LABEL_LEGACY_EMOJI,
+];
+
+/** Whether appendTransaction should convert text+link → onePasswordLink node. */
+export function shouldConvertToOnePasswordLinkNode(
+  text: string,
+  href: string,
+): boolean {
+  if (!isOnePasswordItemUrl(href)) return false;
+  if (isRawUrlTitle(text, href)) return true;
+  return (ONEPASSWORD_MIGRATE_LABELS as readonly string[]).includes(text);
+}
+
+/**
+ * Legacy title-rewrite predicate (pre-Phase 7). Kept for helpers/tests:
+ * raw URL + legacy labels (incl. emoji-stripped) — not custom titles.
+ * Phase 7 plugin uses shouldConvertToOnePasswordLinkNode instead.
+ */
 export function shouldRewriteOnePasswordTitle(
   text: string,
   href: string,
