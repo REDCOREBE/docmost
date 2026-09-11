@@ -355,6 +355,102 @@ test('prosemirror: appendTransaction transforms text==href; href intact; custom 
   assert.strictEqual(undoNode.text, FIXTURE, 'history$ leaves raw URL for undo restore');
 });
 
+test('slash-style insert: text=1Password + link href exact (paste end-state parity)', () => {
+  require(distLink);
+  const { Schema } = loadPm().model;
+  const { EditorState } = loadPm().state;
+
+  const schema = new Schema({
+    nodes: {
+      doc: { content: 'block+' },
+      paragraph: {
+        content: 'inline*',
+        group: 'block',
+        toDOM: () => ['p', 0],
+      },
+      text: { group: 'inline' },
+    },
+    marks: {
+      link: {
+        attrs: {
+          href: {},
+          target: { default: '_blank' },
+          rel: { default: 'noopener noreferrer nofollow' },
+          class: { default: null },
+          internal: { default: false },
+        },
+        inclusive: false,
+        toDOM: (mark) => ['a', { href: mark.attrs.href }, 0],
+      },
+    },
+  });
+
+  // Slash path: insert labeled link directly (no rewrite needed)
+  let state = EditorState.create({
+    schema,
+    doc: schema.node('doc', null, [schema.node('paragraph', null, [])]),
+  });
+  const slashMark = schema.marks.link.create({ href: FIXTURE });
+  let tr = state.tr.insert(1, schema.text(ONEPASSWORD_LABEL, [slashMark]));
+  state = state.apply(tr);
+
+  let slashNode = null;
+  state.doc.descendants((node) => {
+    if (node.isText) slashNode = node;
+  });
+  assert.ok(slashNode);
+  assert.strictEqual(slashNode.text, ONEPASSWORD_LABEL);
+  assert.strictEqual(
+    slashNode.marks.find((m) => m.type === schema.marks.link).attrs.href,
+    FIXTURE,
+    'slash href intact (no query normalize)',
+  );
+
+  // Paste path end-state via rewrite
+  state = EditorState.create({
+    schema,
+    doc: schema.node('doc', null, [schema.node('paragraph', null, [])]),
+  });
+  const pasteMark = schema.marks.link.create({ href: FIXTURE });
+  tr = state.tr.insert(1, schema.text(FIXTURE, [pasteMark]));
+  state = state.apply(tr);
+  // Simulate appendTransaction rewrite
+  const hits = [];
+  state.doc.descendants((node, pos) => {
+    if (!node.isText) return;
+    const mark = schema.marks.link.isInSet(node.marks);
+    if (!mark) return;
+    if (!shouldRewriteOnePasswordTitle(node.text, mark.attrs.href)) return;
+    hits.push({ from: pos, to: pos + node.nodeSize, marks: node.marks });
+  });
+  assert.strictEqual(hits.length, 1);
+  tr = state.tr.replaceWith(
+    hits[0].from,
+    hits[0].to,
+    schema.text(ONEPASSWORD_LABEL, hits[0].marks),
+  );
+  state = state.apply(tr);
+
+  let pasteNode = null;
+  state.doc.descendants((node) => {
+    if (node.isText) pasteNode = node;
+  });
+  assert.ok(pasteNode);
+  assert.strictEqual(pasteNode.text, slashNode.text, 'paste/slash text parity');
+  assert.strictEqual(
+    pasteNode.marks.find((m) => m.type === schema.marks.link).attrs.href,
+    slashNode.marks.find((m) => m.type === schema.marks.link).attrs.href,
+    'paste/slash href parity',
+  );
+});
+
+test('isOnePasswordItemUrl rejects invalid for slash validation', () => {
+  assert.strictEqual(isOnePasswordItemUrl('https://example.com'), false);
+  assert.strictEqual(isOnePasswordItemUrl('not-a-url'), false);
+  assert.strictEqual(isOnePasswordItemUrl(''), false);
+  assert.strictEqual(isOnePasswordItemUrl(FIXTURE), true);
+});
+
 if (process.exitCode) {
   console.error(`\n${passed} tests passed before failure`);
   process.exit(1);

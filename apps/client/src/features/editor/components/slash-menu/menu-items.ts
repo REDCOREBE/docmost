@@ -54,11 +54,13 @@ import {
   GoogleSheetsIcon,
   LoomIcon,
   MiroIcon,
+  OnePasswordIcon,
   TypeformIcon,
   VimeoIcon,
   YoutubeIcon,
 } from "@/components/icons";
 import { insertBaseEmbedBlock } from "@/features/editor/components/base-embed/insert-base-embed";
+import { openOnePasswordLinkModal } from "@/features/editor/components/slash-menu/onepassword-link-form";
 
 const CommandGroups: SlashMenuGroupedItemsType = {
   basic: [
@@ -628,6 +630,24 @@ const CommandGroups: SlashMenuGroupedItemsType = {
           .deleteRange(range)
           .insertColumns({ layout: "five_equal" })
           .run(),
+    },
+    {
+      title: "1Password",
+      description: "Ajouter un lien vers un accès 1Password",
+      searchTerms: [
+        "1password",
+        "onepassword",
+        "op",
+        "permalink",
+        "password",
+        "vault",
+      ],
+      icon: OnePasswordIcon,
+      command: ({ editor, range }: CommandProps) => {
+        // Delete slash query, then open native permalink form (not an embed).
+        editor.chain().focus().deleteRange(range).run();
+        openOnePasswordLinkModal(editor);
+      },
     },
     {
       title: "Iframe embed",
