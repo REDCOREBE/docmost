@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { REDCORE_AICHAT_V38_CLIENT_NATIVE } from "../constants/redcore-aichat-v38";
 import { REDCORE_AICHAT_V39_CLIENT_NATIVE } from "../constants/redcore-aichat-v39";
 import { sendChatMessage } from "../services/ai-chat-service";
 import type {
@@ -24,7 +25,9 @@ export type SendMessageContext =
       contextSpaceSlug?: string;
     };
 
-// Keep marker in the production client bundle for patch-aichat-v39 skip-when-native.
+// Keep markers in the production client bundle for skip-when-native patches.
+(globalThis as Record<string, unknown>)[REDCORE_AICHAT_V38_CLIENT_NATIVE] =
+  REDCORE_AICHAT_V38_CLIENT_NATIVE;
 (globalThis as Record<string, unknown>)[REDCORE_AICHAT_V39_CLIENT_NATIVE] =
   REDCORE_AICHAT_V39_CLIENT_NATIVE;
 
@@ -151,9 +154,17 @@ export function useChatStream(
               queryClient.invalidateQueries({ queryKey: ["ai-chats"] });
               break;
             case "content":
-              setStreamingContent((prev) => prev + event.text);
+              // V3.8: replace:true clears/replaces (server clears on first tool,
+              // progressive final flush, synthesis reconcile); else append.
+              if (event.replace) {
+                setStreamingContent(() => event.text || "");
+              } else {
+                setStreamingContent((prev) => prev + event.text);
+              }
               break;
             case "tool_call":
+              // V3.8: drop any optimistically streamed pre-tool narration.
+              setStreamingContent(() => "");
               setStreamingToolCalls((prev) => [
                 ...prev,
                 {
