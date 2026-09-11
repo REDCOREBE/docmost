@@ -165,9 +165,6 @@ export default function OnePasswordLinkView(props: NodeViewProps) {
                 }
               }}
             />
-            <Text size="xs" c="dimmed">
-              Libellé fixe : {ONEPASSWORD_LABEL}
-            </Text>
             {updatedAt ? (
               <Text size="xs" c="dimmed">
                 Mis à jour : {updatedAt}
