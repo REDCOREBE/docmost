@@ -1,4 +1,4 @@
-import { Tooltip, ThemeIcon } from "@mantine/core";
+import { Tooltip, ThemeIcon, UnstyledButton } from "@mantine/core";
 import { IconFileDescription } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 import { buildPageUrl } from "@/features/page/page.utils";
@@ -12,20 +12,20 @@ export function TasksLinkedPageIcon({
   if (!linkedPage?.spaceSlug) return null;
   return (
     <Tooltip label={linkedPage.title || linkedPage.slugId} withArrow>
-      <ThemeIcon
+      <UnstyledButton
         component={Link}
         to={buildPageUrl(
           linkedPage.spaceSlug,
           linkedPage.slugId,
           linkedPage.title,
         )}
-        variant="transparent"
-        color="gray"
-        size={18}
         onClick={(e) => e.stopPropagation()}
+        style={{ display: "inline-flex" }}
       >
-        <IconFileDescription size={16} />
-      </ThemeIcon>
+        <ThemeIcon variant="transparent" color="gray" size={18}>
+          <IconFileDescription size={16} />
+        </ThemeIcon>
+      </UnstyledButton>
     </Tooltip>
   );
 }

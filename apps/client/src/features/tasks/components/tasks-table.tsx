@@ -34,7 +34,8 @@ export function TasksTable({
 
   return (
     <div className={classes.tableWrap}>
-      <Table highlightOnHover verticalSpacing="sm" minWidth={720}>
+      <Table.ScrollContainer minWidth={720}>
+      <Table highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>{t("Title")}</Table.Th>
@@ -93,6 +94,7 @@ export function TasksTable({
           ))}
         </Table.Tbody>
       </Table>
+      </Table.ScrollContainer>
     </div>
   );
 }
