@@ -919,6 +919,72 @@ describe('TaskService ACL and isolation', () => {
       ).resolves.toBeTruthy();
       expect(taskPropertyValueRepo.upsert).toHaveBeenCalled();
     });
+
+    describe('multi_select option validation', () => {
+      const optA = '00000000-0000-0000-0000-0000000000o1';
+      const optB = '00000000-0000-0000-0000-0000000000o2';
+      const optOtherProp = '00000000-0000-0000-0000-0000000000o9';
+
+      beforeEach(() => {
+        spaceAbility.createForUser.mockResolvedValue(buildAbility('writer'));
+        taskItemRepo.findById.mockResolvedValue({
+          id: taskId,
+          spaceId,
+          workspaceId,
+        } as any);
+        taskPropertyRepo.findById.mockResolvedValue({
+          id: propertyId,
+          spaceId,
+          workspaceId,
+          type: 'multi_select',
+        } as any);
+        taskPropertyOptionRepo.listByProperty.mockResolvedValue([
+          { id: optA, propertyId, name: 'A' },
+          { id: optB, propertyId, name: 'B' },
+        ] as any);
+      });
+
+      it('multi_select valid IDs => OK', async () => {
+        taskPropertyValueRepo.upsert.mockResolvedValue({
+          taskId,
+          propertyId,
+          valueJson: [optA, optB],
+        } as any);
+
+        await expect(
+          service.setPropertyValue(user, workspaceId, {
+            taskId,
+            propertyId,
+            valueJson: [optA, optB],
+          }),
+        ).resolves.toMatchObject({ valueJson: [optA, optB] });
+        expect(taskPropertyOptionRepo.listByProperty).toHaveBeenCalledWith(
+          propertyId,
+        );
+      });
+
+      it('unknown option => 400', async () => {
+        await expect(
+          service.setPropertyValue(user, workspaceId, {
+            taskId,
+            propertyId,
+            valueJson: [optA, '00000000-0000-0000-0000-0000000000zz'],
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(taskPropertyValueRepo.upsert).not.toHaveBeenCalled();
+      });
+
+      it('option from another property => 400', async () => {
+        await expect(
+          service.setPropertyValue(user, workspaceId, {
+            taskId,
+            propertyId,
+            valueJson: [optOtherProp],
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(taskPropertyValueRepo.upsert).not.toHaveBeenCalled();
+      });
+    });
   });
 });
 

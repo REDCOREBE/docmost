@@ -555,7 +555,35 @@ export class TaskService {
           }
         }
         break;
-      case 'multi_select':
+      case 'multi_select': {
+        if (dto.valueJson == null) {
+          row.valueJson = null;
+          break;
+        }
+        if (!Array.isArray(dto.valueJson)) {
+          throw new BadRequestException(
+            'multi_select value must be an array of option ids',
+          );
+        }
+        const optionIds = dto.valueJson as string[];
+        if (optionIds.length === 0) {
+          row.valueJson = null;
+          break;
+        }
+        const options = await this.taskPropertyOptionRepo.listByProperty(
+          property.id,
+        );
+        const allowed = new Set(options.map((o) => o.id));
+        for (const id of optionIds) {
+          if (typeof id !== 'string' || !allowed.has(id)) {
+            throw new BadRequestException(
+              'Invalid multi_select option',
+            );
+          }
+        }
+        row.valueJson = optionIds;
+        break;
+      }
       case 'person':
       case 'page':
         row.valueJson = dto.valueJson ?? null;

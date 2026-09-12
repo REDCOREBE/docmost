@@ -11,6 +11,7 @@ import {
   deleteTask,
   deleteTaskProperty,
   deleteTaskView,
+  getTaskInfo,
   getTaskProperties,
   getTaskViews,
   getTasks,
@@ -59,12 +60,27 @@ export function useTaskPropertiesQuery(spaceId?: string) {
   });
 }
 
+export function taskInfoQueryKey(taskId: string) {
+  return ["task", taskId] as const;
+}
+
+/** Detail hydration for TaskDetailDrawer — not used by list(). */
+export function useTaskInfoQuery(taskId?: string) {
+  return useQuery({
+    queryKey: taskInfoQueryKey(taskId ?? ""),
+    queryFn: () => getTaskInfo(taskId!),
+    enabled: !!taskId,
+    staleTime: 30_000,
+  });
+}
+
 export function useCreateTaskMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateTaskParams) => createTask(data),
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.setQueryData(taskInfoQueryKey(created.id), created);
     },
   });
 }
@@ -73,8 +89,9 @@ export function useUpdateTaskMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: UpdateTaskParams) => updateTask(data),
-    onSuccess: () => {
+    onSuccess: (updated, variables) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.setQueryData(taskInfoQueryKey(variables.taskId), updated);
     },
   });
 }
@@ -83,8 +100,9 @@ export function useDeleteTaskMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (taskId: string) => deleteTask(taskId),
-    onSuccess: () => {
+    onSuccess: (_r, taskId) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.removeQueries({ queryKey: taskInfoQueryKey(taskId) });
     },
   });
 }
@@ -159,8 +177,11 @@ export function useSetTaskPropertyValueMutation() {
   return useMutation({
     mutationFn: (data: SetTaskPropertyValueParams) =>
       setTaskPropertyValue(data),
-    onSuccess: () => {
+    onSuccess: (_r, variables) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({
+        queryKey: taskInfoQueryKey(variables.taskId),
+      });
     },
   });
 }

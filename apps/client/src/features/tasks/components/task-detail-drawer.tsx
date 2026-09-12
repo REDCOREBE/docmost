@@ -4,6 +4,8 @@ import {
   Menu,
   NumberInput,
   Select,
+  Skeleton,
+  Stack,
   Text,
   Textarea,
 } from "@mantine/core";
@@ -41,6 +43,7 @@ import {
   useDeleteTaskMutation,
   useDeleteTaskPropertyMutation,
   useSetTaskPropertyValueMutation,
+  useTaskInfoQuery,
   useTaskPropertiesQuery,
 } from "../queries/task-query";
 import { useSpaceMembersInfiniteQuery } from "@/features/space/queries/space-query";
@@ -84,6 +87,19 @@ function PropertyRow({
   );
 }
 
+function DrawerBodySkeleton() {
+  return (
+    <Stack gap="sm" py="xs">
+      {Array.from({ length: 7 }).map((_, i) => (
+        <div key={i} className={classes.propertyRow}>
+          <Skeleton height={14} width={120} />
+          <Skeleton height={28} style={{ flex: 1 }} />
+        </div>
+      ))}
+    </Stack>
+  );
+}
+
 export function TaskDetailDrawer({
   opened,
   onClose,
@@ -105,7 +121,19 @@ export function TaskDetailDrawer({
   const setValueMutation = useSetTaskPropertyValueMutation();
 
   const isCreate = !task;
-  const effectiveSpaceId = task?.spaceId ?? spaceId ?? "";
+  const taskId = task?.id;
+
+  const {
+    data: taskDetail,
+    isLoading: taskInfoLoading,
+  } = useTaskInfoQuery(opened && taskId ? taskId : undefined);
+
+  /** Prefer hydrated info(); never rely on list() propertyValues. */
+  const hydrated = taskDetail ?? null;
+  const detailPending = !isCreate && opened && !!taskId && !hydrated;
+
+  const effectiveSpaceId =
+    hydrated?.spaceId ?? task?.spaceId ?? spaceId ?? "";
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -155,19 +183,34 @@ export function TaskDetailDrawer({
 
   useEffect(() => {
     if (!opened) return;
-    setTitle(task?.title ?? "");
-    setDescription(task?.description ?? "");
-    setStatus(task?.status ?? presetStatus ?? "todo");
-    setPriority(task?.priority ?? "none");
-    setProgress(task?.progress ?? 0);
-    setDueDate(task?.dueDate ? task.dueDate.slice(0, 10) : null);
-    setSelectedSpaceId(task?.spaceId ?? spaceId ?? "");
+    if (isCreate) {
+      setTitle("");
+      setDescription("");
+      setStatus(presetStatus ?? "todo");
+      setPriority("none");
+      setProgress(0);
+      setDueDate(null);
+      setSelectedSpaceId(spaceId ?? "");
+      setLocalValues({});
+      return;
+    }
+    // Wait for getTaskInfo — do not hydrate propertyValues from list().
+    if (!hydrated) return;
+    setTitle(hydrated.title ?? "");
+    setDescription(hydrated.description ?? "");
+    setStatus(hydrated.status ?? "todo");
+    setPriority(hydrated.priority ?? "none");
+    setProgress(hydrated.progress ?? 0);
+    setDueDate(hydrated.dueDate ? hydrated.dueDate.slice(0, 10) : null);
+    setSelectedSpaceId(hydrated.spaceId ?? spaceId ?? "");
     const map: Record<string, TaskPropertyValue> = {};
-    for (const v of (task as any)?.propertyValues ?? []) {
+    for (const v of (
+      hydrated as TaskItem & { propertyValues?: TaskPropertyValue[] }
+    ).propertyValues ?? []) {
       map[v.propertyId] = v;
     }
     setLocalValues(map);
-  }, [opened, task, spaceId, presetStatus]);
+  }, [opened, isCreate, hydrated, spaceId, presetStatus]);
 
   const persistSystem = useCallback(
     async (patch: Partial<UpdateTaskParams>) => {
@@ -204,9 +247,9 @@ export function TaskDetailDrawer({
   }
 
   async function handleTitleBlur() {
-    if (isCreate) return;
+    if (isCreate || !hydrated) return;
     const nextTitle = title.trim();
-    if (!nextTitle || nextTitle === task?.title) return;
+    if (!nextTitle || nextTitle === hydrated.title) return;
     await persistSystem({ title: nextTitle });
   }
 
@@ -242,6 +285,13 @@ export function TaskDetailDrawer({
       notifications.show({ color: "red", message: t("Failed to save") });
     }
   }
+
+  const linkedPage = hydrated?.linkedPage ?? null;
+  const assignees = hydrated?.assignees ?? task?.assignees ?? [];
+  const fieldsDisabled =
+    (!canEdit && !isCreate) ||
+    detailPending ||
+    (taskInfoLoading && !hydrated);
 
   return (
     <Drawer
@@ -325,20 +375,24 @@ export function TaskDetailDrawer({
         </div>
 
         <div className={classes.drawerHeader}>
-          <input
-            className={classes.titleInput}
-            value={title}
-            disabled={!canEdit && !isCreate}
-            placeholder={t("Untitled")}
-            onChange={(e) => setTitle(e.currentTarget.value)}
-            onBlur={() => void handleTitleBlur()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && isCreate) {
-                e.preventDefault();
-                void handleCreate();
-              }
-            }}
-          />
+          {detailPending ? (
+            <Skeleton height={36} width="80%" />
+          ) : (
+            <input
+              className={classes.titleInput}
+              value={title}
+              disabled={fieldsDisabled}
+              placeholder={t("Untitled")}
+              onChange={(e) => setTitle(e.currentTarget.value)}
+              onBlur={() => void handleTitleBlur()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && isCreate) {
+                  e.preventDefault();
+                  void handleCreate();
+                }
+              }}
+            />
+          )}
           {isCreate && (
             <Text size="xs" c="dimmed" mt={6}>
               {t("Press Enter or blur fields to create")}
@@ -347,187 +401,219 @@ export function TaskDetailDrawer({
         </div>
 
         <div className={classes.drawerBody}>
-          {isCreate && !spaceId && (
-            <PropertyRow icon={<IconFileText size={15} />} label={t("Space")}>
-              <Select
-                variant="unstyled"
-                data={spaceOptions ?? []}
-                value={selectedSpaceId || null}
-                onChange={(v) => setSelectedSpaceId(v ?? "")}
-                searchable
-                placeholder={t("Space")}
-              />
-            </PropertyRow>
-          )}
+          {detailPending ? (
+            <DrawerBodySkeleton />
+          ) : (
+            <>
+              {isCreate && !spaceId && (
+                <PropertyRow
+                  icon={<IconFileText size={15} />}
+                  label={t("Space")}
+                >
+                  <Select
+                    variant="unstyled"
+                    data={spaceOptions ?? []}
+                    value={selectedSpaceId || null}
+                    onChange={(v) => setSelectedSpaceId(v ?? "")}
+                    searchable
+                    placeholder={t("Space")}
+                  />
+                </PropertyRow>
+              )}
 
-          <PropertyRow icon={<IconProgress size={15} />} label={t("Status")}>
-            <Select
-              variant="unstyled"
-              disabled={!canEdit && !isCreate}
-              data={[
-                { value: "todo", label: t("To do") },
-                { value: "in_progress", label: t("In progress") },
-                { value: "done", label: t("Done") },
-              ]}
-              value={status}
-              onChange={(v) => {
-                const nextStatus = (v as TaskStatus) || "todo";
-                setStatus(nextStatus);
-                if (!isCreate) void persistSystem({ status: nextStatus });
-              }}
-            />
-          </PropertyRow>
-
-          <PropertyRow icon={<IconFlag size={15} />} label={t("Priority")}>
-            <Select
-              variant="unstyled"
-              disabled={!canEdit && !isCreate}
-              data={[
-                { value: "none", label: t("None") },
-                { value: "low", label: t("Low") },
-                { value: "medium", label: t("Medium") },
-                { value: "high", label: t("High") },
-                { value: "urgent", label: t("Urgent") },
-              ]}
-              value={priority}
-              onChange={(v) => {
-                const nextPriority = (v as TaskPriority) || "none";
-                setPriority(nextPriority);
-                if (!isCreate) void persistSystem({ priority: nextPriority });
-              }}
-            />
-          </PropertyRow>
-
-          <PropertyRow icon={<IconUsers size={15} />} label={t("Assignees")}>
-            <Text size="sm" c="dimmed">
-              {(task?.assignees ?? []).map((a) => a.name).join(", ") || "—"}
-            </Text>
-          </PropertyRow>
-
-          <PropertyRow icon={<IconChartBar size={15} />} label={t("Progress")}>
-            <NumberInput
-              variant="unstyled"
-              disabled={!canEdit && !isCreate}
-              value={progress}
-              min={0}
-              max={100}
-              onChange={(v) => {
-                const next = typeof v === "number" ? v : 0;
-                setProgress(next);
-              }}
-              onBlur={() => {
-                if (!isCreate) void persistSystem({ progress });
-              }}
-            />
-          </PropertyRow>
-
-          <PropertyRow icon={<IconCalendar size={15} />} label={t("Due date")}>
-            <DateInput
-              variant="unstyled"
-              disabled={!canEdit && !isCreate}
-              value={dueDate || undefined}
-              clearable
-              onChange={(val) => {
-                setDueDate(val ?? null);
-                if (!isCreate) {
-                  void persistSystem({
-                    dueDate: val ? new Date(val).toISOString() : null,
-                  });
-                }
-              }}
-            />
-          </PropertyRow>
-
-          <PropertyRow icon={<IconFileText size={15} />} label={t("Linked page")}>
-            <Text size="sm" c="dimmed">
-              {task?.linkedPage?.title || "—"}
-            </Text>
-          </PropertyRow>
-
-          <PropertyRow icon={<IconFileText size={15} />} label={t("Description")}>
-            <Textarea
-              variant="unstyled"
-              disabled={!canEdit && !isCreate}
-              value={description}
-              autosize
-              minRows={2}
-              maxRows={8}
-              onChange={(e) => setDescription(e.currentTarget.value)}
-              onBlur={() => {
-                if (isCreate) {
-                  if (title.trim() && (spaceId || selectedSpaceId)) {
-                    void handleCreate();
-                  }
-                  return;
-                }
-                if (description !== (task?.description ?? "")) {
-                  void persistSystem({ description });
-                }
-              }}
-            />
-          </PropertyRow>
-
-          {!isCreate &&
-            properties.map((property: TaskProperty) => (
               <PropertyRow
-                key={property.id}
-                icon={<IconFlag size={15} />}
-                label={property.name}
+                icon={<IconProgress size={15} />}
+                label={t("Status")}
               >
-                <div style={{ display: "flex", width: "100%", gap: 4 }}>
-                  <div style={{ flex: 1 }}>
-                    <TaskPropertyEditor
-                      property={property}
-                      value={localValues[property.id]}
-                      disabled={!canEdit}
-                      personOptions={personOptions}
-                      pageOptions={pageOptions}
-                      onChange={(patch) =>
-                        void handlePropertyValue(property, patch)
-                      }
-                    />
-                  </div>
-                  {canManageProperties && (
-                    <Menu withinPortal>
-                      <Menu.Target>
-                        <button type="button" className={classes.iconButton}>
-                          <IconDotsVertical size={14} />
-                        </button>
-                      </Menu.Target>
-                      <Menu.Dropdown>
-                        <Menu.Item
-                          color="red"
-                          onClick={() =>
-                            void deletePropertyMutation.mutateAsync(
-                              property.id,
-                            )
-                          }
-                        >
-                          {t("Delete property")}
-                        </Menu.Item>
-                      </Menu.Dropdown>
-                    </Menu>
-                  )}
-                </div>
+                <Select
+                  variant="unstyled"
+                  disabled={fieldsDisabled}
+                  data={[
+                    { value: "todo", label: t("To do") },
+                    { value: "in_progress", label: t("In progress") },
+                    { value: "done", label: t("Done") },
+                  ]}
+                  value={status}
+                  onChange={(v) => {
+                    const nextStatus = (v as TaskStatus) || "todo";
+                    setStatus(nextStatus);
+                    if (!isCreate) void persistSystem({ status: nextStatus });
+                  }}
+                />
               </PropertyRow>
-            ))}
 
-          {!isCreate && canManageProperties && effectiveSpaceId && (
-            <TaskAddPropertyMenu
-              onCreate={async (type: TaskPropertyType, name: string) => {
-                await createPropertyMutation.mutateAsync({
-                  spaceId: effectiveSpaceId,
-                  name,
-                  type,
-                });
-              }}
-            />
-          )}
+              <PropertyRow icon={<IconFlag size={15} />} label={t("Priority")}>
+                <Select
+                  variant="unstyled"
+                  disabled={fieldsDisabled}
+                  data={[
+                    { value: "none", label: t("None") },
+                    { value: "low", label: t("Low") },
+                    { value: "medium", label: t("Medium") },
+                    { value: "high", label: t("High") },
+                    { value: "urgent", label: t("Urgent") },
+                  ]}
+                  value={priority}
+                  onChange={(v) => {
+                    const nextPriority = (v as TaskPriority) || "none";
+                    setPriority(nextPriority);
+                    if (!isCreate) {
+                      void persistSystem({ priority: nextPriority });
+                    }
+                  }}
+                />
+              </PropertyRow>
 
-          {isCreate && (
-            <Text size="sm" c="dimmed" mt="md">
-              {t("Save the task to add custom properties")}
-            </Text>
+              <PropertyRow
+                icon={<IconUsers size={15} />}
+                label={t("Assignees")}
+              >
+                <Text size="sm" c="dimmed">
+                  {assignees.map((a) => a.name).join(", ") || "—"}
+                </Text>
+              </PropertyRow>
+
+              <PropertyRow
+                icon={<IconChartBar size={15} />}
+                label={t("Progress")}
+              >
+                <NumberInput
+                  variant="unstyled"
+                  disabled={fieldsDisabled}
+                  value={progress}
+                  min={0}
+                  max={100}
+                  onChange={(v) => {
+                    const next = typeof v === "number" ? v : 0;
+                    setProgress(next);
+                  }}
+                  onBlur={() => {
+                    if (!isCreate) void persistSystem({ progress });
+                  }}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                icon={<IconCalendar size={15} />}
+                label={t("Due date")}
+              >
+                <DateInput
+                  variant="unstyled"
+                  disabled={fieldsDisabled}
+                  value={dueDate || undefined}
+                  clearable
+                  onChange={(val) => {
+                    setDueDate(val ?? null);
+                    if (!isCreate) {
+                      void persistSystem({
+                        dueDate: val ? new Date(val).toISOString() : null,
+                      });
+                    }
+                  }}
+                />
+              </PropertyRow>
+
+              <PropertyRow
+                icon={<IconFileText size={15} />}
+                label={t("Linked page")}
+              >
+                <Text size="sm" c="dimmed">
+                  {linkedPage?.title || "—"}
+                </Text>
+              </PropertyRow>
+
+              <PropertyRow
+                icon={<IconFileText size={15} />}
+                label={t("Description")}
+              >
+                <Textarea
+                  variant="unstyled"
+                  disabled={fieldsDisabled}
+                  value={description}
+                  autosize
+                  minRows={2}
+                  maxRows={8}
+                  onChange={(e) => setDescription(e.currentTarget.value)}
+                  onBlur={() => {
+                    if (isCreate) {
+                      if (title.trim() && (spaceId || selectedSpaceId)) {
+                        void handleCreate();
+                      }
+                      return;
+                    }
+                    if (description !== (hydrated?.description ?? "")) {
+                      void persistSystem({ description });
+                    }
+                  }}
+                />
+              </PropertyRow>
+
+              {!isCreate &&
+                properties.map((property: TaskProperty) => (
+                  <PropertyRow
+                    key={property.id}
+                    icon={<IconFlag size={15} />}
+                    label={property.name}
+                  >
+                    <div style={{ display: "flex", width: "100%", gap: 4 }}>
+                      <div style={{ flex: 1 }}>
+                        <TaskPropertyEditor
+                          property={property}
+                          value={localValues[property.id]}
+                          disabled={fieldsDisabled}
+                          personOptions={personOptions}
+                          pageOptions={pageOptions}
+                          onChange={(patch) =>
+                            void handlePropertyValue(property, patch)
+                          }
+                        />
+                      </div>
+                      {canManageProperties && (
+                        <Menu withinPortal>
+                          <Menu.Target>
+                            <button
+                              type="button"
+                              className={classes.iconButton}
+                            >
+                              <IconDotsVertical size={14} />
+                            </button>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Item
+                              color="red"
+                              onClick={() =>
+                                void deletePropertyMutation.mutateAsync(
+                                  property.id,
+                                )
+                              }
+                            >
+                              {t("Delete property")}
+                            </Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
+                      )}
+                    </div>
+                  </PropertyRow>
+                ))}
+
+              {!isCreate && canManageProperties && effectiveSpaceId && (
+                <TaskAddPropertyMenu
+                  onCreate={async (type: TaskPropertyType, name: string) => {
+                    await createPropertyMutation.mutateAsync({
+                      spaceId: effectiveSpaceId,
+                      name,
+                      type,
+                    });
+                  }}
+                />
+              )}
+
+              {isCreate && (
+                <Text size="sm" c="dimmed" mt="md">
+                  {t("Save the task to add custom properties")}
+                </Text>
+              )}
+            </>
           )}
         </div>
       </div>
