@@ -23,7 +23,7 @@ export type TaskEditorValues = {
   status: TaskStatus;
   priority: TaskPriority;
   progress: number;
-  dueDate?: Date | null;
+  dueDate?: string | null;
   spaceId?: string;
 };
 
@@ -50,7 +50,7 @@ export function TaskEditorModal({
   const [status, setStatus] = useState<TaskStatus>("todo");
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [progress, setProgress] = useState(0);
-  const [dueDate, setDueDate] = useState<Date | null>(null);
+  const [dueDate, setDueDate] = useState<string | null>(null);
   const [selectedSpaceId, setSelectedSpaceId] = useState(spaceId ?? "");
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export function TaskEditorModal({
     setStatus(task?.status ?? "todo");
     setPriority(task?.priority ?? "none");
     setProgress(task?.progress ?? 0);
-    setDueDate(task?.dueDate ? new Date(task.dueDate) : null);
+    setDueDate(task?.dueDate ? task.dueDate.slice(0, 10) : null);
     setSelectedSpaceId(task?.spaceId ?? spaceId ?? "");
   }, [opened, task, spaceId]);
 
@@ -127,8 +127,8 @@ export function TaskEditorModal({
         />
         <DateInput
           label={t("Due date")}
-          value={dueDate}
-          onChange={setDueDate}
+          value={dueDate || undefined}
+          onChange={(val) => setDueDate(val ?? null)}
           clearable
         />
         <Group justify="flex-end">

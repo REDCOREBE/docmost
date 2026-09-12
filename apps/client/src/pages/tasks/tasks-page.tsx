@@ -100,7 +100,9 @@ export function TasksPageContent({
         status: values.status,
         priority: values.priority,
         progress: values.progress,
-        dueDate: values.dueDate ? values.dueDate.toISOString() : null,
+        dueDate: values.dueDate
+          ? new Date(values.dueDate).toISOString()
+          : null,
       });
     } else {
       await createMutation.mutateAsync({
@@ -110,7 +112,9 @@ export function TasksPageContent({
         status: values.status,
         priority: values.priority,
         progress: values.progress,
-        dueDate: values.dueDate ? values.dueDate.toISOString() : null,
+        dueDate: values.dueDate
+          ? new Date(values.dueDate).toISOString()
+          : null,
       });
     }
     setEditorOpen(false);
