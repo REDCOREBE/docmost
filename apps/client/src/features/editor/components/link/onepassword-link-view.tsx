@@ -193,7 +193,7 @@ export default function OnePasswordLinkView(props: NodeViewProps) {
           setOpened(next);
           if (!next) setMode("menu");
         }}
-        width={mode === "menu" ? 300 : 340}
+        width={mode === "menu" ? 236 : 340}
         position="bottom"
         withArrow
         shadow="md"
