@@ -1315,5 +1315,16 @@
   "Save view": "Save view",
   "Visibility": "Visibility",
   "Personal": "Personal",
-  "Shared in Space": "Shared in Space"
+  "Shared in Space": "Shared in Space",
+  "All tasks": "All tasks",
+  "Add a property": "Add a property",
+  "Property name": "Property name",
+  "Failed to save": "Failed to save",
+  "Previous": "Previous",
+  "Next": "Next",
+  "This cannot be undone.": "This cannot be undone.",
+  "Press Enter or blur fields to create": "Press Enter or fill required fields to create",
+  "Save the task to add custom properties": "Save the task to add custom properties",
+  "More": "More",
+  "Linked page": "Linked page"
 }

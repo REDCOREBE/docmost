@@ -13,21 +13,21 @@ import { EmptyState } from "@/components/ui/empty-state";
 import PageListSkeleton from "@/components/ui/page-list-skeleton";
 import {
   useCreateTaskMutation,
+  useTaskPropertiesQuery,
+  useTaskViewsQuery,
   useTasksQuery,
   useUpdateTaskMutation,
 } from "@/features/tasks/queries/task-query";
 import { TasksViewTabs } from "@/features/tasks/components/tasks-view-tabs";
+import { TasksScopeTabs } from "@/features/tasks/components/tasks-scope-tabs";
 import { TasksToolbar } from "@/features/tasks/components/tasks-toolbar";
 import { TasksTable } from "@/features/tasks/components/tasks-table";
 import { TasksKanban } from "@/features/tasks/components/tasks-kanban";
 import { TasksSavedViews } from "@/features/tasks/components/tasks-saved-views";
+import { TaskDetailDrawer } from "@/features/tasks/components/task-detail-drawer";
 import {
-  TaskEditorModal,
-  TaskEditorValues,
-} from "@/features/tasks/components/task-editor-modal";
-import {
-  TaskDueFilter,
   TaskItem,
+  TaskScopeFilter,
   TaskStatus,
   TaskViewType,
 } from "@/features/tasks/types/task.types";
@@ -44,7 +44,6 @@ type TasksPageProps = {
   spaceId?: string;
   spaceSlug?: string;
   title?: string;
-  defaultAssignee?: "me";
 };
 
 function isWritableSpaceRole(role?: SpaceRole | string | null): boolean {
@@ -54,42 +53,54 @@ function isWritableSpaceRole(role?: SpaceRole | string | null): boolean {
 export function TasksPageContent({
   spaceId,
   title,
-  defaultAssignee,
   spacePermissions,
 }: TasksPageProps & { spacePermissions?: any }) {
   const { t } = useTranslation();
   const [view, setView] = useState<TaskViewType>("table");
+  const [scope, setScope] = useState<TaskScopeFilter>("all");
   const [status, setStatus] = useState<TaskStatus | null>(null);
-  const [due, setDue] = useState<TaskDueFilter | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [spaceFilter, setSpaceFilter] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<TaskItem | null>(null);
+  const [createPreset, setCreatePreset] = useState<{
+    status?: TaskStatus;
+    spaceId?: string;
+  } | null>(null);
 
-  const listParams = useMemo(
-    () => ({
-      spaceId,
-      assignee: !spaceId ? defaultAssignee ?? "me" : undefined,
+  const listParams = useMemo(() => {
+    const isGlobal = !spaceId;
+    return {
+      spaceId: spaceId ?? spaceFilter ?? undefined,
+      assignee: isGlobal && scope === "mine" ? ("me" as const) : undefined,
+      due: isGlobal && scope === "overdue" ? ("overdue" as const) : undefined,
       status: status ?? undefined,
-      due: due ?? undefined,
       limit: 100,
-    }),
-    [spaceId, defaultAssignee, status, due],
-  );
+    };
+  }, [spaceId, spaceFilter, scope, status]);
 
   const { data, isLoading, isError, hasNextPage, fetchNextPage, isFetchingNextPage } =
     useTasksQuery(listParams);
   const createMutation = useCreateTaskMutation();
   const updateMutation = useUpdateTaskMutation();
   const { data: spacesData } = useGetSpacesQuery({ limit: 100 });
+  const { data: spaceProperties } = useTaskPropertiesQuery(spaceId);
+  const { data: views } = useTaskViewsQuery(spaceId);
+  const visiblePropertyIds = useMemo(() => {
+    const cfg = views?.find((v) => v.type === view)?.config;
+    return cfg?.visiblePropertyIds;
+  }, [views, view]);
 
   const tasks = data?.pages.flatMap((p) => p.items) ?? [];
+  const allSpaces = (spacesData?.items ?? []) as ISpace[];
   const writableSpaces = useMemo(
-    () =>
-      ((spacesData?.items ?? []) as ISpace[]).filter((s) =>
-        isWritableSpaceRole(s.membership?.role),
-      ),
-    [spacesData],
+    () => allSpaces.filter((s) => isWritableSpaceRole(s.membership?.role)),
+    [allSpaces],
   );
   const spaceOptions = writableSpaces.map((s) => ({
+    value: s.id,
+    label: s.name,
+  }));
+  const spaceFilterOptions = allSpaces.map((s) => ({
     value: s.id,
     label: s.name,
   }));
@@ -103,46 +114,33 @@ export function TasksPageContent({
     ? ability.can(SpaceCaslAction.Edit, SpaceCaslSubject.Page) ||
       ability.can(SpaceCaslAction.Manage, SpaceCaslSubject.Page)
     : false;
-  // Global /tasks: create only when at least one Writer/Admin space exists;
-  // space picker in the modal is the required next step (API remains authority).
-  const canCreate = spaceId ? canEditInSpace : writableSpaces.length > 0;
-  const canManageShared = spaceId
+  const canManageInSpace = spaceId
     ? ability.can(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)
     : false;
+  const canCreate = spaceId ? canEditInSpace : writableSpaces.length > 0;
+  const canManageShared = canManageInSpace;
 
   const canWriteTask = (task: TaskItem) => {
     if (spaceId) return canEditInSpace;
     return writableSpaceIds.has(task.spaceId);
   };
 
-  async function handleSubmit(values: TaskEditorValues) {
-    if (editing) {
-      await updateMutation.mutateAsync({
-        taskId: editing.id,
-        title: values.title,
-        description: values.description,
-        status: values.status,
-        priority: values.priority,
-        progress: values.progress,
-        dueDate: values.dueDate
-          ? new Date(values.dueDate).toISOString()
-          : null,
-      });
-    } else {
-      await createMutation.mutateAsync({
-        spaceId: values.spaceId!,
-        title: values.title,
-        description: values.description,
-        status: values.status,
-        priority: values.priority,
-        progress: values.progress,
-        dueDate: values.dueDate
-          ? new Date(values.dueDate).toISOString()
-          : null,
-      });
-    }
-    setEditorOpen(false);
+  const canManageTaskSpace = (task: TaskItem) => {
+    if (spaceId) return canManageInSpace;
+    const space = allSpaces.find((s) => s.id === task.spaceId);
+    return space?.membership?.role === SpaceRole.ADMIN;
+  };
+
+  function openCreate(preset?: { status?: TaskStatus; spaceId?: string }) {
     setEditing(null);
+    setCreatePreset(preset ?? null);
+    setDrawerOpen(true);
+  }
+
+  function openTask(task: TaskItem) {
+    setCreatePreset(null);
+    setEditing(task);
+    setDrawerOpen(true);
   }
 
   if (isLoading) {
@@ -171,6 +169,9 @@ export function TasksPageContent({
     <Container size="xl" py="xl">
       <Stack gap="md">
         <Title order={2}>{title ?? t("Tasks")}</Title>
+        {!spaceId && (
+          <TasksScopeTabs value={scope} onChange={setScope} />
+        )}
         <Group justify="space-between" wrap="wrap">
           <TasksViewTabs value={view} onChange={setView} />
           <TasksSavedViews
@@ -182,14 +183,13 @@ export function TasksPageContent({
         </Group>
         <TasksToolbar
           status={status}
-          due={due}
           onStatusChange={setStatus}
-          onDueChange={setDue}
           canCreate={canCreate}
-          onCreate={() => {
-            setEditing(null);
-            setEditorOpen(true);
-          }}
+          onCreate={() => openCreate()}
+          showSpaceFilter={!spaceId}
+          spaceFilter={spaceFilter}
+          onSpaceFilterChange={setSpaceFilter}
+          spaceFilterOptions={spaceFilterOptions}
         />
         {tasks.length === 0 ? (
           <EmptyState
@@ -202,21 +202,23 @@ export function TasksPageContent({
             tasks={tasks}
             showSpace={!spaceId}
             canWriteTask={canWriteTask}
-            onOpen={(task) => {
-              if (!canWriteTask(task)) return;
-              setEditing(task);
-              setEditorOpen(true);
-            }}
+            onOpen={openTask}
           />
         ) : (
           <TasksKanban
             tasks={tasks}
+            showSpace={!spaceId}
             canWriteTask={canWriteTask}
-            onOpen={(task) => {
-              if (!canWriteTask(task)) return;
-              setEditing(task);
-              setEditorOpen(true);
-            }}
+            canCreate={canCreate}
+            properties={spaceProperties}
+            visiblePropertyIds={visiblePropertyIds}
+            onOpen={openTask}
+            onAddInColumn={(status) =>
+              openCreate({
+                status,
+                spaceId: spaceId ?? spaceFilter ?? undefined,
+              })
+            }
             onStatusChange={(taskId, nextStatus) => {
               const task = tasks.find((item) => item.id === taskId);
               if (!task || !canWriteTask(task)) return;
@@ -235,17 +237,31 @@ export function TasksPageContent({
         )}
       </Stack>
 
-      <TaskEditorModal
-        opened={editorOpen}
+      <TaskDetailDrawer
+        opened={drawerOpen}
         onClose={() => {
-          setEditorOpen(false);
+          setDrawerOpen(false);
           setEditing(null);
+          setCreatePreset(null);
         }}
         task={editing}
-        spaceId={spaceId}
+        tasks={tasks}
+        onNavigate={(task) => setEditing(task)}
+        spaceId={spaceId ?? createPreset?.spaceId}
         spaceOptions={spaceOptions}
-        saving={createMutation.isPending || updateMutation.isPending}
-        onSubmit={handleSubmit}
+        presetStatus={createPreset?.status}
+        canEdit={
+          editing
+            ? canWriteTask(editing)
+            : Boolean(spaceId ? canEditInSpace : writableSpaces.length > 0)
+        }
+        canManageProperties={
+          editing
+            ? canManageTaskSpace(editing)
+            : Boolean(spaceId && canManageInSpace)
+        }
+        createMutation={createMutation}
+        updateMutation={updateMutation}
       />
     </Container>
   );
@@ -253,7 +269,5 @@ export function TasksPageContent({
 
 export default function TasksPage() {
   const { t } = useTranslation();
-  return (
-    <TasksPageContent title={t("My tasks")} defaultAssignee="me" />
-  );
+  return <TasksPageContent title={t("Tasks")} />;
 }

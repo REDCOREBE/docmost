@@ -7,6 +7,9 @@ import {
 import { TaskItemRepo } from '@docmost/db/repos/task/task-item.repo';
 import { TaskAssigneeRepo } from '@docmost/db/repos/task/task-assignee.repo';
 import { TaskViewRepo } from '@docmost/db/repos/task/task-view.repo';
+import { TaskPropertyRepo } from '@docmost/db/repos/task/task-property.repo';
+import { TaskPropertyOptionRepo } from '@docmost/db/repos/task/task-property-option.repo';
+import { TaskPropertyValueRepo } from '@docmost/db/repos/task/task-property-value.repo';
 import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
@@ -27,6 +30,11 @@ import {
   CreateTaskViewDto,
   UpdateTaskViewDto,
 } from './dto/task-view.dto';
+import {
+  CreateTaskPropertyDto,
+  SetTaskPropertyValueDto,
+  UpdateTaskPropertyDto,
+} from './dto/task-property.dto';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
 
 @Injectable()
@@ -35,6 +43,9 @@ export class TaskService {
     private readonly taskItemRepo: TaskItemRepo,
     private readonly taskAssigneeRepo: TaskAssigneeRepo,
     private readonly taskViewRepo: TaskViewRepo,
+    private readonly taskPropertyRepo: TaskPropertyRepo,
+    private readonly taskPropertyOptionRepo: TaskPropertyOptionRepo,
+    private readonly taskPropertyValueRepo: TaskPropertyValueRepo,
     private readonly spaceMemberRepo: SpaceMemberRepo,
     private readonly pageRepo: PageRepo,
     private readonly pagePermissionRepo: PagePermissionRepo,
@@ -97,7 +108,10 @@ export class TaskService {
       user.id,
       workspaceId,
     );
-    return hydrated;
+    const propertyValues = await this.taskPropertyValueRepo.listByTask(
+      taskId,
+    );
+    return { ...hydrated, propertyValues };
   }
 
   async create(user: User, workspaceId: string, dto: CreateTaskDto) {
@@ -303,6 +317,299 @@ export class TaskService {
 
     await this.assertCanMutateView(user, view);
     await this.taskViewRepo.delete(viewId, workspaceId);
+  }
+
+  async listProperties(user: User, workspaceId: string, spaceId: string) {
+    const ability = await this.spaceAbility.createForUser(user, spaceId);
+    if (ability.cannot(SpaceCaslAction.Read, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException();
+    }
+    return this.taskPropertyRepo.listBySpace(workspaceId, spaceId);
+  }
+
+  async createProperty(
+    user: User,
+    workspaceId: string,
+    dto: CreateTaskPropertyDto,
+  ) {
+    const ability = await this.spaceAbility.createForUser(user, dto.spaceId);
+    if (ability.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)) {
+      throw new ForbiddenException();
+    }
+
+    const name = dto.name.trim();
+    if (!name) {
+      throw new BadRequestException('name is required');
+    }
+
+    const position =
+      dto.position ?? generateJitteredKeyBetween(null, null);
+
+    try {
+      const property = await executeTx(this.db, async (trx) => {
+        const created = await this.taskPropertyRepo.insert(
+          {
+            workspaceId,
+            spaceId: dto.spaceId,
+            name,
+            type: dto.type,
+            config: (dto.config ?? {}) as any,
+            position,
+          },
+          trx,
+        );
+
+        if (
+          (dto.type === 'select' || dto.type === 'multi_select') &&
+          dto.options?.length
+        ) {
+          let prev: string | null = null;
+          const rows = dto.options.map((opt) => {
+            const pos =
+              opt.position ?? generateJitteredKeyBetween(prev, null);
+            prev = pos;
+            return {
+              propertyId: created.id,
+              name: opt.name.trim(),
+              color: opt.color ?? null,
+              position: pos,
+            };
+          });
+          await this.taskPropertyOptionRepo.insertMany(rows, trx);
+        }
+
+        return created;
+      });
+
+      const list = await this.taskPropertyRepo.listBySpace(
+        workspaceId,
+        dto.spaceId,
+      );
+      return list.find((p) => p.id === property.id) ?? property;
+    } catch (err: any) {
+      if (err?.code === '23505') {
+        throw new BadRequestException(
+          'A property with this name already exists in the Space',
+        );
+      }
+      throw err;
+    }
+  }
+
+  async updateProperty(
+    user: User,
+    workspaceId: string,
+    dto: UpdateTaskPropertyDto,
+  ) {
+    const existing = await this.taskPropertyRepo.findById(
+      dto.propertyId,
+      workspaceId,
+    );
+    if (!existing) {
+      throw new NotFoundException('Property not found');
+    }
+
+    const ability = await this.spaceAbility.createForUser(
+      user,
+      existing.spaceId,
+    );
+    if (ability.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)) {
+      throw new ForbiddenException();
+    }
+
+    try {
+      await executeTx(this.db, async (trx) => {
+        const patch: Record<string, unknown> = {};
+        if (dto.name !== undefined) patch.name = dto.name.trim();
+        if (dto.config !== undefined) patch.config = dto.config;
+        if (dto.position !== undefined) patch.position = dto.position;
+        if (Object.keys(patch).length > 0) {
+          await this.taskPropertyRepo.update(
+            dto.propertyId,
+            workspaceId,
+            patch as any,
+            trx,
+          );
+        }
+
+        if (dto.options) {
+          await this.taskPropertyOptionRepo.deleteByProperty(
+            dto.propertyId,
+            trx,
+          );
+          let prev: string | null = null;
+          const rows = dto.options.map((opt) => {
+            const pos =
+              opt.position ?? generateJitteredKeyBetween(prev, null);
+            prev = pos;
+            return {
+              propertyId: dto.propertyId,
+              name: opt.name.trim(),
+              color: opt.color ?? null,
+              position: pos,
+            };
+          });
+          await this.taskPropertyOptionRepo.insertMany(rows, trx);
+        }
+      });
+    } catch (err: any) {
+      if (err?.code === '23505') {
+        throw new BadRequestException(
+          'A property with this name already exists in the Space',
+        );
+      }
+      throw err;
+    }
+
+    const list = await this.taskPropertyRepo.listBySpace(
+      workspaceId,
+      existing.spaceId,
+    );
+    return list.find((p) => p.id === dto.propertyId);
+  }
+
+  async deleteProperty(
+    user: User,
+    workspaceId: string,
+    propertyId: string,
+  ) {
+    const existing = await this.taskPropertyRepo.findById(
+      propertyId,
+      workspaceId,
+    );
+    if (!existing) {
+      throw new NotFoundException('Property not found');
+    }
+
+    const ability = await this.spaceAbility.createForUser(
+      user,
+      existing.spaceId,
+    );
+    if (ability.cannot(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)) {
+      throw new ForbiddenException();
+    }
+
+    await this.taskPropertyRepo.delete(propertyId, workspaceId);
+  }
+
+  async setPropertyValue(
+    user: User,
+    workspaceId: string,
+    dto: SetTaskPropertyValueDto,
+  ) {
+    const task = await this.taskItemRepo.findById(dto.taskId, workspaceId);
+    if (!task) {
+      throw new NotFoundException('Task not found');
+    }
+
+    const ability = await this.spaceAbility.createForUser(user, task.spaceId);
+    if (ability.cannot(SpaceCaslAction.Edit, SpaceCaslSubject.Page)) {
+      throw new ForbiddenException();
+    }
+
+    const property = await this.taskPropertyRepo.findById(
+      dto.propertyId,
+      workspaceId,
+    );
+    if (!property || property.spaceId !== task.spaceId) {
+      throw new BadRequestException(
+        'Property must belong to the same Space as the task',
+      );
+    }
+
+    await this.assertPropertyValue(property.type, dto, task.spaceId, workspaceId, user.id);
+
+    const clear = {
+      valueText: null as string | null,
+      valueNumber: null as number | null,
+      valueTimestamptz: null as Date | null,
+      valueJson: null as any,
+    };
+
+    let row: any = { ...clear, taskId: dto.taskId, propertyId: dto.propertyId };
+
+    switch (property.type) {
+      case 'text':
+      case 'long_text':
+        row.valueText = dto.valueText ?? null;
+        break;
+      case 'number':
+        row.valueNumber =
+          dto.valueNumber === undefined || dto.valueNumber === null
+            ? null
+            : dto.valueNumber;
+        break;
+      case 'date':
+        row.valueTimestamptz = dto.valueTimestamptz
+          ? new Date(dto.valueTimestamptz)
+          : null;
+        break;
+      case 'select':
+        row.valueText = dto.valueText ?? null;
+        if (row.valueText) {
+          const options = await this.taskPropertyOptionRepo.listByProperty(
+            property.id,
+          );
+          if (!options.some((o) => o.id === row.valueText)) {
+            throw new BadRequestException('Invalid select option');
+          }
+        }
+        break;
+      case 'multi_select':
+      case 'person':
+      case 'page':
+        row.valueJson = dto.valueJson ?? null;
+        break;
+      default:
+        throw new BadRequestException('Unsupported property type');
+    }
+
+    const allNull =
+      row.valueText == null &&
+      row.valueNumber == null &&
+      row.valueTimestamptz == null &&
+      row.valueJson == null;
+
+    if (allNull) {
+      await this.taskPropertyValueRepo.delete(dto.taskId, dto.propertyId);
+      return null;
+    }
+
+    return this.taskPropertyValueRepo.upsert(row);
+  }
+
+  private async assertPropertyValue(
+    type: string,
+    dto: SetTaskPropertyValueDto,
+    spaceId: string,
+    workspaceId: string,
+    userId: string,
+  ) {
+    if (type === 'person') {
+      const ids = Array.isArray(dto.valueJson)
+        ? (dto.valueJson as string[])
+        : [];
+      await this.assertAssigneesInSpace(ids, spaceId);
+    }
+    if (type === 'page') {
+      const pageId =
+        dto.valueJson &&
+        typeof dto.valueJson === 'object' &&
+        !Array.isArray(dto.valueJson)
+          ? (dto.valueJson as any).pageId
+          : typeof dto.valueJson === 'string'
+            ? dto.valueJson
+            : null;
+      if (pageId) {
+        await this.assertLinkedPageWritable(pageId, spaceId, workspaceId);
+        const accessible = await this.pagePermissionRepo.filterAccessiblePageIds(
+          { pageIds: [pageId], userId },
+        );
+        if (!accessible.includes(pageId)) {
+          throw new BadRequestException('Page is not accessible');
+        }
+      }
+    }
   }
 
   private async assertCanMutateView(user: User, view: any) {

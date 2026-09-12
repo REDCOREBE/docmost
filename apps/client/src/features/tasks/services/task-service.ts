@@ -2,11 +2,15 @@ import api from "@/lib/api-client";
 import { IPagination } from "@/lib/types.ts";
 import {
   CreateTaskParams,
+  CreateTaskPropertyParams,
   CreateTaskViewParams,
   ListTasksParams,
+  SetTaskPropertyValueParams,
   TaskItem,
+  TaskProperty,
   TaskView,
   UpdateTaskParams,
+  UpdateTaskPropertyParams,
 } from "../types/task.types";
 
 export async function getTasks(
@@ -60,4 +64,36 @@ export async function updateTaskView(params: {
 
 export async function deleteTaskView(viewId: string): Promise<void> {
   await api.post("/tasks/views/delete", { viewId });
+}
+
+export async function getTaskProperties(
+  spaceId: string,
+): Promise<TaskProperty[]> {
+  const req = await api.post<TaskProperty[]>("/tasks/properties", { spaceId });
+  return req.data;
+}
+
+export async function createTaskProperty(
+  params: CreateTaskPropertyParams,
+): Promise<TaskProperty> {
+  const req = await api.post<TaskProperty>("/tasks/properties/create", params);
+  return req.data;
+}
+
+export async function updateTaskProperty(
+  params: UpdateTaskPropertyParams,
+): Promise<TaskProperty> {
+  const req = await api.post<TaskProperty>("/tasks/properties/update", params);
+  return req.data;
+}
+
+export async function deleteTaskProperty(propertyId: string): Promise<void> {
+  await api.post("/tasks/properties/delete", { propertyId });
+}
+
+export async function setTaskPropertyValue(
+  params: SetTaskPropertyValueParams,
+): Promise<unknown> {
+  const req = await api.post("/tasks/properties/value", params);
+  return req.data;
 }

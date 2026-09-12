@@ -16,6 +16,9 @@ import { TaskService } from './task.service';
 import { TaskItemRepo } from '@docmost/db/repos/task/task-item.repo';
 import { TaskAssigneeRepo } from '@docmost/db/repos/task/task-assignee.repo';
 import { TaskViewRepo } from '@docmost/db/repos/task/task-view.repo';
+import { TaskPropertyRepo } from '@docmost/db/repos/task/task-property.repo';
+import { TaskPropertyOptionRepo } from '@docmost/db/repos/task/task-property-option.repo';
+import { TaskPropertyValueRepo } from '@docmost/db/repos/task/task-property-value.repo';
 import { SpaceMemberRepo } from '@docmost/db/repos/space/space-member.repo';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
 import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
@@ -67,6 +70,9 @@ describe('TaskService ACL and isolation', () => {
   let taskItemRepo: jest.Mocked<TaskItemRepo>;
   let taskAssigneeRepo: jest.Mocked<TaskAssigneeRepo>;
   let taskViewRepo: jest.Mocked<TaskViewRepo>;
+  let taskPropertyRepo: jest.Mocked<TaskPropertyRepo>;
+  let taskPropertyOptionRepo: jest.Mocked<TaskPropertyOptionRepo>;
+  let taskPropertyValueRepo: jest.Mocked<TaskPropertyValueRepo>;
   let spaceMemberRepo: jest.Mocked<SpaceMemberRepo>;
   let pageRepo: jest.Mocked<PageRepo>;
   let pagePermissionRepo: jest.Mocked<PagePermissionRepo>;
@@ -116,6 +122,33 @@ describe('TaskService ACL and isolation', () => {
           },
         },
         {
+          provide: TaskPropertyRepo,
+          useValue: {
+            listBySpace: jest.fn(),
+            insert: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+            findById: jest.fn(),
+          },
+        },
+        {
+          provide: TaskPropertyOptionRepo,
+          useValue: {
+            insertMany: jest.fn(),
+            deleteByProperty: jest.fn(),
+            listByProperty: jest.fn(),
+          },
+        },
+        {
+          provide: TaskPropertyValueRepo,
+          useValue: {
+            upsert: jest.fn(),
+            delete: jest.fn(),
+            listByTask: jest.fn().mockResolvedValue([]),
+            listByTasks: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
           provide: SpaceMemberRepo,
           useValue: {
             getUserIdsWithSpaceAccess: jest.fn(),
@@ -152,6 +185,9 @@ describe('TaskService ACL and isolation', () => {
     taskItemRepo = module.get(TaskItemRepo);
     taskAssigneeRepo = module.get(TaskAssigneeRepo);
     taskViewRepo = module.get(TaskViewRepo);
+    taskPropertyRepo = module.get(TaskPropertyRepo);
+    taskPropertyOptionRepo = module.get(TaskPropertyOptionRepo);
+    taskPropertyValueRepo = module.get(TaskPropertyValueRepo);
     spaceMemberRepo = module.get(SpaceMemberRepo);
     pageRepo = module.get(PageRepo);
     pagePermissionRepo = module.get(PagePermissionRepo);
@@ -611,6 +647,279 @@ describe('TaskService ACL and isolation', () => {
       expect(patch.completedAt).toBeNull();
     });
   });
+
+  describe('V2 custom properties', () => {
+    const propertyId = '00000000-0000-0000-0000-0000000000pr';
+
+    it('global list passes assignee/due filters without weakening ACL', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('reader'));
+      taskItemRepo.findPaginated.mockResolvedValue({ items: [], meta: {} } as any);
+
+      await service.list(user, workspaceId, {}, { limit: 20 } as any);
+      expect(taskItemRepo.findPaginated).toHaveBeenCalledWith(
+        userId,
+        workspaceId,
+        expect.anything(),
+        expect.objectContaining({
+          spaceId: undefined,
+          assignee: undefined,
+          due: undefined,
+        }),
+      );
+
+      await service.list(
+        user,
+        workspaceId,
+        { assignee: 'me' },
+        { limit: 20 } as any,
+      );
+      expect(taskItemRepo.findPaginated).toHaveBeenCalledWith(
+        userId,
+        workspaceId,
+        expect.anything(),
+        expect.objectContaining({ assignee: 'me' }),
+      );
+
+      await service.list(
+        user,
+        workspaceId,
+        { due: 'overdue' },
+        { limit: 20 } as any,
+      );
+      expect(taskItemRepo.findPaginated).toHaveBeenCalledWith(
+        userId,
+        workspaceId,
+        expect.anything(),
+        expect.objectContaining({ due: 'overdue' }),
+      );
+    });
+
+    it('admin can create property', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('admin'));
+      taskPropertyRepo.insert.mockResolvedValue({
+        id: propertyId,
+        spaceId,
+        type: 'text',
+      } as any);
+      taskPropertyRepo.listBySpace.mockResolvedValue([
+        { id: propertyId, spaceId, type: 'text', options: [] },
+      ] as any);
+
+      await expect(
+        service.createProperty(user, workspaceId, {
+          spaceId,
+          name: 'Effort',
+          type: 'text',
+        }),
+      ).resolves.toMatchObject({ id: propertyId });
+    });
+
+    it('writer create property => 403', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('writer'));
+      await expect(
+        service.createProperty(user, workspaceId, {
+          spaceId,
+          name: 'Effort',
+          type: 'text',
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('writer set value => OK', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('writer'));
+      taskItemRepo.findById.mockResolvedValue({
+        id: taskId,
+        spaceId,
+        workspaceId,
+      } as any);
+      taskPropertyRepo.findById.mockResolvedValue({
+        id: propertyId,
+        spaceId,
+        workspaceId,
+        type: 'text',
+      } as any);
+      taskPropertyValueRepo.upsert.mockResolvedValue({
+        taskId,
+        propertyId,
+        valueText: 'hi',
+      } as any);
+
+      await expect(
+        service.setPropertyValue(user, workspaceId, {
+          taskId,
+          propertyId,
+          valueText: 'hi',
+        }),
+      ).resolves.toMatchObject({ valueText: 'hi' });
+    });
+
+    it('reader set value => 403', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('reader'));
+      taskItemRepo.findById.mockResolvedValue({
+        id: taskId,
+        spaceId,
+        workspaceId,
+      } as any);
+
+      await expect(
+        service.setPropertyValue(user, workspaceId, {
+          taskId,
+          propertyId,
+          valueText: 'nope',
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rejects property from another space', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('writer'));
+      taskItemRepo.findById.mockResolvedValue({
+        id: taskId,
+        spaceId,
+        workspaceId,
+      } as any);
+      taskPropertyRepo.findById.mockResolvedValue({
+        id: propertyId,
+        spaceId: otherSpaceId,
+        workspaceId,
+        type: 'text',
+      } as any);
+
+      await expect(
+        service.setPropertyValue(user, workspaceId, {
+          taskId,
+          propertyId,
+          valueText: 'x',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('person outside space rejected', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('writer'));
+      taskItemRepo.findById.mockResolvedValue({
+        id: taskId,
+        spaceId,
+        workspaceId,
+      } as any);
+      taskPropertyRepo.findById.mockResolvedValue({
+        id: propertyId,
+        spaceId,
+        workspaceId,
+        type: 'person',
+      } as any);
+      spaceMemberRepo.getUserIdsWithSpaceAccess.mockResolvedValue(new Set());
+
+      await expect(
+        service.setPropertyValue(user, workspaceId, {
+          taskId,
+          propertyId,
+          valueJson: ['00000000-0000-0000-0000-0000000000u9'],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('page outside space rejected', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('writer'));
+      taskItemRepo.findById.mockResolvedValue({
+        id: taskId,
+        spaceId,
+        workspaceId,
+      } as any);
+      taskPropertyRepo.findById.mockResolvedValue({
+        id: propertyId,
+        spaceId,
+        workspaceId,
+        type: 'page',
+      } as any);
+      pageRepo.findManyByIds.mockResolvedValue([
+        { id: pageId, spaceId: otherSpaceId },
+      ] as any);
+
+      await expect(
+        service.setPropertyValue(user, workspaceId, {
+          taskId,
+          propertyId,
+          valueJson: { pageId },
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('inaccessible page rejected', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('writer'));
+      taskItemRepo.findById.mockResolvedValue({
+        id: taskId,
+        spaceId,
+        workspaceId,
+      } as any);
+      taskPropertyRepo.findById.mockResolvedValue({
+        id: propertyId,
+        spaceId,
+        workspaceId,
+        type: 'page',
+      } as any);
+      pageRepo.findManyByIds.mockResolvedValue([
+        { id: pageId, spaceId },
+      ] as any);
+      pagePermissionRepo.filterAccessiblePageIds.mockResolvedValue([]);
+
+      await expect(
+        service.setPropertyValue(user, workspaceId, {
+          taskId,
+          propertyId,
+          valueJson: { pageId },
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('delete property cascades via repo delete', async () => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('admin'));
+      taskPropertyRepo.findById.mockResolvedValue({
+        id: propertyId,
+        spaceId,
+        workspaceId,
+      } as any);
+      taskPropertyRepo.delete.mockResolvedValue(undefined);
+
+      await service.deleteProperty(user, workspaceId, propertyId);
+      expect(taskPropertyRepo.delete).toHaveBeenCalledWith(
+        propertyId,
+        workspaceId,
+      );
+    });
+
+    it.each([
+      ['text', { valueText: 'a' }],
+      ['long_text', { valueText: 'long' }],
+      ['number', { valueNumber: 3 }],
+      ['date', { valueTimestamptz: '2026-09-12T00:00:00.000Z' }],
+    ] as const)('roundtrip %s', async (type, patch) => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('writer'));
+      taskItemRepo.findById.mockResolvedValue({
+        id: taskId,
+        spaceId,
+        workspaceId,
+      } as any);
+      taskPropertyRepo.findById.mockResolvedValue({
+        id: propertyId,
+        spaceId,
+        workspaceId,
+        type,
+      } as any);
+      taskPropertyValueRepo.upsert.mockResolvedValue({
+        taskId,
+        propertyId,
+        ...patch,
+      } as any);
+
+      await expect(
+        service.setPropertyValue(user, workspaceId, {
+          taskId,
+          propertyId,
+          ...patch,
+        }),
+      ).resolves.toBeTruthy();
+      expect(taskPropertyValueRepo.upsert).toHaveBeenCalled();
+    });
+  });
 });
 
 describe('Tasks migration CASCADE contract', () => {
@@ -624,5 +933,21 @@ describe('Tasks migration CASCADE contract', () => {
     expect(src).toContain("dropTable('task_views')");
     expect(src).toContain("dropTable('task_assignees')");
     expect(src).toContain("dropTable('task_items')");
+  });
+
+  it('V2 properties migration drops in cascade-safe order', () => {
+    const migrationPath = join(
+      __dirname,
+      '../../database/migrations/20260912T120000-task-properties.ts',
+    );
+    const src = readFileSync(migrationPath, 'utf8');
+    const valuesIdx = src.indexOf("dropTable('task_property_values')");
+    const optionsIdx = src.indexOf("dropTable('task_property_options')");
+    const propsIdx = src.indexOf("dropTable('task_properties')");
+    expect(valuesIdx).toBeGreaterThan(-1);
+    expect(optionsIdx).toBeGreaterThan(valuesIdx);
+    expect(propsIdx).toBeGreaterThan(optionsIdx);
+    expect(src).not.toContain('is_system');
+    expect(src).not.toContain('base_');
   });
 });

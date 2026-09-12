@@ -22,6 +22,13 @@ import {
   TaskViewIdDto,
   UpdateTaskViewDto,
 } from './dto/task-view.dto';
+import {
+  CreateTaskPropertyDto,
+  ListTaskPropertiesDto,
+  SetTaskPropertyValueDto,
+  TaskPropertyIdDto,
+  UpdateTaskPropertyDto,
+} from './dto/task-property.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
@@ -117,5 +124,55 @@ export class TaskController {
     @AuthWorkspace() workspace: Workspace,
   ) {
     await this.taskService.deleteView(user, workspace.id, dto.viewId);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('properties')
+  async listProperties(
+    @Body() dto: ListTaskPropertiesDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.taskService.listProperties(user, workspace.id, dto.spaceId);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('properties/create')
+  async createProperty(
+    @Body() dto: CreateTaskPropertyDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.taskService.createProperty(user, workspace.id, dto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('properties/update')
+  async updateProperty(
+    @Body() dto: UpdateTaskPropertyDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.taskService.updateProperty(user, workspace.id, dto);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('properties/delete')
+  async deleteProperty(
+    @Body() dto: TaskPropertyIdDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    await this.taskService.deleteProperty(user, workspace.id, dto.propertyId);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('properties/value')
+  async setPropertyValue(
+    @Body() dto: SetTaskPropertyValueDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    return this.taskService.setPropertyValue(user, workspace.id, dto);
   }
 }
