@@ -170,6 +170,41 @@ export interface BaseViews {
   workspaceId: string;
 }
 
+export interface TaskAssignees {
+  taskId: string;
+  userId: string;
+}
+
+export interface TaskItems {
+  completedAt: Timestamp | null;
+  createdAt: Generated<Timestamp>;
+  createdById: string | null;
+  description: string | null;
+  dueDate: Timestamp | null;
+  id: Generated<string>;
+  linkedPageId: string | null;
+  priority: Generated<string>;
+  progress: Generated<number>;
+  spaceId: string;
+  status: string;
+  title: string;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface TaskViews {
+  config: Generated<Json>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  name: string;
+  ownerUserId: string | null;
+  position: string;
+  spaceId: string | null;
+  type: string;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
 export interface Billing {
   amount: Int8 | null;
   billingScheme: string | null;
@@ -669,6 +704,9 @@ export interface DB {
   shares: Shares;
   spaceMembers: SpaceMembers;
   spaces: Spaces;
+  taskAssignees: TaskAssignees;
+  taskItems: TaskItems;
+  taskViews: TaskViews;
   templates: Templates;
   userMfa: UserMfa;
   users: Users;

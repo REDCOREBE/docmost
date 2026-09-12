@@ -40,6 +40,9 @@ import {
   Watchers,
   Audit as _Audit,
   Templates,
+  TaskItems,
+  TaskAssignees,
+  TaskViews,
 } from './db';
 import { PageEmbeddings } from '@docmost/db/types/embeddings.types';
 
@@ -256,3 +259,17 @@ export type UpdatableBaseRow = Updateable<Omit<BaseRows, 'id'>>;
 export type BaseView = Selectable<BaseViews>;
 export type InsertableBaseView = Insertable<BaseViews>;
 export type UpdatableBaseView = Updateable<Omit<BaseViews, 'id'>>;
+
+// Task Item
+export type TaskItem = Selectable<TaskItems>;
+export type InsertableTaskItem = Insertable<TaskItems>;
+export type UpdatableTaskItem = Updateable<Omit<TaskItems, 'id'>>;
+
+// Task Assignee
+export type TaskAssignee = Selectable<TaskAssignees>;
+export type InsertableTaskAssignee = Insertable<TaskAssignees>;
+
+// Task View
+export type TaskView = Selectable<TaskViews>;
+export type InsertableTaskView = Insertable<TaskViews>;
+export type UpdatableTaskView = Updateable<Omit<TaskViews, 'id'>>;
