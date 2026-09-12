@@ -20,6 +20,7 @@ import {
   IconStarFilled,
   IconTemplate,
   IconTrash,
+  IconChecklist,
 } from "@tabler/icons-react";
 import {
   useSpaceWatchStatusQuery,
@@ -127,6 +128,32 @@ export function SpaceSidebar() {
                   stroke={2}
                 />
                 <span>{t("Overview")}</span>
+              </div>
+            </UnstyledButton>
+
+            <UnstyledButton
+              component={Link}
+              to={`/s/${spaceSlug}/tasks`}
+              className={clsx(
+                classes.menu,
+                location.pathname.toLowerCase() ===
+                  `/s/${spaceSlug}/tasks`.toLowerCase()
+                  ? classes.activeButton
+                  : "",
+              )}
+              onClick={() => {
+                if (mobileSidebarOpened) {
+                  toggleMobileSidebar();
+                }
+              }}
+            >
+              <div className={classes.menuItemInner}>
+                <IconChecklist
+                  size={18}
+                  className={classes.menuItemIcon}
+                  stroke={2}
+                />
+                <span>{t("Tasks")}</span>
               </div>
             </UnstyledButton>
 

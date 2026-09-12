@@ -44,6 +44,8 @@ import VerifiedPages from "@/ee/page-verification/pages/verified-pages.tsx";
 import TemplateList from "@/ee/template/pages/template-list";
 import TemplateEditor from "@/ee/template/pages/template-editor";
 import FavoritesPage from "@/pages/favorites/favorites-page";
+import TasksPage from "@/pages/tasks/tasks-page";
+import SpaceTasksPage from "@/pages/tasks/space-tasks-page";
 import AiChat from "@/ee/ai-chat/pages/ai-chat.tsx";
 import VerifyEmail from "@/ee/pages/verify-email.tsx";
 import LabelPage from "@/pages/label/label-page";
@@ -94,6 +96,7 @@ export default function App() {
           <Route path={"/ai/chat/:chatId"} element={<AiChat />} />
           <Route path={"/spaces"} element={<SpacesPage />} />
           <Route path={"/favorites"} element={<FavoritesPage />} />
+          <Route path={"/tasks"} element={<TasksPage />} />
           <Route path={"/labels/:labelName"} element={<LabelPage />} />
           <Route path={"/templates"} element={<TemplateList />} />
           <Route
@@ -101,6 +104,7 @@ export default function App() {
             element={<TemplateEditor />}
           />
           <Route path={"/s/:spaceSlug"} element={<SpaceHome />} />
+          <Route path={"/s/:spaceSlug/tasks"} element={<SpaceTasksPage />} />
           <Route path={"/s/:spaceSlug/trash"} element={<SpaceTrash />} />
           <Route
             path={"/s/:spaceSlug/p/:pageSlug"}

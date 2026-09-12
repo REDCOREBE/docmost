@@ -8,6 +8,7 @@ import {
   IconSettings,
   IconUserPlus,
   IconTemplate,
+  IconChecklist,
 } from "@tabler/icons-react";
 import { Link, useLocation } from "react-router-dom";
 import classes from "./global-sidebar.module.css";
@@ -36,6 +37,7 @@ export default function GlobalSidebar() {
   const mainNavItems = [
     { label: "Home", icon: IconHome, path: "/home" },
     { label: "Favorites", icon: IconStar, path: "/favorites" },
+    { label: "Tasks", icon: IconChecklist, path: "/tasks" },
     { label: "Spaces", icon: IconLayoutGrid, path: "/spaces" },
     {
       label: "Templates",
