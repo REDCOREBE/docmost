@@ -205,6 +205,35 @@ export interface TaskViews {
   workspaceId: string;
 }
 
+export interface TaskProperties {
+  config: Generated<Json>;
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  name: string;
+  position: string;
+  spaceId: string;
+  type: string;
+  updatedAt: Generated<Timestamp>;
+  workspaceId: string;
+}
+
+export interface TaskPropertyOptions {
+  color: string | null;
+  id: Generated<string>;
+  name: string;
+  position: string;
+  propertyId: string;
+}
+
+export interface TaskPropertyValues {
+  propertyId: string;
+  taskId: string;
+  valueJson: Json | null;
+  valueNumber: number | null;
+  valueText: string | null;
+  valueTimestamptz: Timestamp | null;
+}
+
 export interface Billing {
   amount: Int8 | null;
   billingScheme: string | null;
@@ -706,6 +735,9 @@ export interface DB {
   spaces: Spaces;
   taskAssignees: TaskAssignees;
   taskItems: TaskItems;
+  taskProperties: TaskProperties;
+  taskPropertyOptions: TaskPropertyOptions;
+  taskPropertyValues: TaskPropertyValues;
   taskViews: TaskViews;
   templates: Templates;
   userMfa: UserMfa;

@@ -43,6 +43,9 @@ import {
   TaskItems,
   TaskAssignees,
   TaskViews,
+  TaskProperties,
+  TaskPropertyOptions,
+  TaskPropertyValues,
 } from './db';
 import { PageEmbeddings } from '@docmost/db/types/embeddings.types';
 
@@ -273,3 +276,15 @@ export type InsertableTaskAssignee = Insertable<TaskAssignees>;
 export type TaskView = Selectable<TaskViews>;
 export type InsertableTaskView = Insertable<TaskViews>;
 export type UpdatableTaskView = Updateable<Omit<TaskViews, 'id'>>;
+
+// Task Property (custom, space-scoped — V2)
+export type TaskProperty = Selectable<TaskProperties>;
+export type InsertableTaskProperty = Insertable<TaskProperties>;
+export type UpdatableTaskProperty = Updateable<Omit<TaskProperties, 'id'>>;
+
+export type TaskPropertyOption = Selectable<TaskPropertyOptions>;
+export type InsertableTaskPropertyOption = Insertable<TaskPropertyOptions>;
+
+export type TaskPropertyValue = Selectable<TaskPropertyValues>;
+export type InsertableTaskPropertyValue = Insertable<TaskPropertyValues>;
+export type UpdatableTaskPropertyValue = Updateable<TaskPropertyValues>;

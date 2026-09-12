@@ -18,7 +18,7 @@ export function TasksViewTabs({
       }}
     >
       <Tabs.List>
-        <Tabs.Tab value="table">{t("All")}</Tabs.Tab>
+        <Tabs.Tab value="table">{t("Table")}</Tabs.Tab>
         <Tabs.Tab value="kanban">{t("Board")}</Tabs.Tab>
       </Tabs.List>
     </Tabs>

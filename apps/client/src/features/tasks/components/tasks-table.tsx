@@ -53,19 +53,12 @@ export function TasksTable({
           {tasks.map((task) => (
             <Table.Tr key={task.id}>
               <Table.Td>
-                {canWriteTask && !canWriteTask(task) ? (
+                <UnstyledButton onClick={() => onOpen(task)}>
                   <Text fw={500} size="sm">
                     {task.title}{" "}
                     <TasksLinkedPageIcon linkedPage={task.linkedPage} />
                   </Text>
-                ) : (
-                  <UnstyledButton onClick={() => onOpen(task)}>
-                    <Text fw={500} size="sm">
-                      {task.title}{" "}
-                      <TasksLinkedPageIcon linkedPage={task.linkedPage} />
-                    </Text>
-                  </UnstyledButton>
-                )}
+                </UnstyledButton>
               </Table.Td>
               <Table.Td>
                 <Badge color={statusColor[task.status]} variant="light">

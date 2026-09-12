@@ -1315,5 +1315,16 @@
   "Save view": "Enregistrer la vue",
   "Visibility": "Visibilité",
   "Personal": "Personnelle",
-  "Shared in Space": "Partagée dans l'espace"
+  "Shared in Space": "Partagée dans l'espace",
+  "All tasks": "Tout",
+  "Add a property": "Ajouter une propriété",
+  "Property name": "Nom de la propriété",
+  "Failed to save": "Échec de l'enregistrement",
+  "Previous": "Précédent",
+  "Next": "Suivant",
+  "This cannot be undone.": "Cette action est irréversible.",
+  "Press Enter or blur fields to create": "Appuyez sur Entrée ou renseignez les champs pour créer",
+  "Save the task to add custom properties": "Enregistrez la tâche pour ajouter des propriétés personnalisées",
+  "More": "Plus",
+  "Linked page": "Page liée"
 }
