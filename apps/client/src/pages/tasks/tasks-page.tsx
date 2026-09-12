@@ -1,15 +1,7 @@
 import { useMemo, useState } from "react";
-import {
-  Button,
-  Container,
-  Group,
-  Stack,
-  Title,
-  Text,
-} from "@mantine/core";
+import { Container, Text, Title } from "@mantine/core";
 import { useTranslation } from "react-i18next";
-import { IconChecklist } from "@tabler/icons-react";
-import { EmptyState } from "@/components/ui/empty-state";
+import { notifications } from "@mantine/notifications";
 import PageListSkeleton from "@/components/ui/page-list-skeleton";
 import {
   useCreateTaskMutation,
@@ -18,19 +10,15 @@ import {
   useTasksQuery,
   useUpdateTaskMutation,
 } from "@/features/tasks/queries/task-query";
-import { TasksViewTabs } from "@/features/tasks/components/tasks-view-tabs";
-import { TasksScopeTabs } from "@/features/tasks/components/tasks-scope-tabs";
-import { TasksToolbar } from "@/features/tasks/components/tasks-toolbar";
-import { TasksTable } from "@/features/tasks/components/tasks-table";
-import { TasksKanban } from "@/features/tasks/components/tasks-kanban";
-import { TasksSavedViews } from "@/features/tasks/components/tasks-saved-views";
-import { TaskDetailDrawer } from "@/features/tasks/components/task-detail-drawer";
+import { TasksNativeShell } from "@/features/tasks/components/native/tasks-native-shell";
 import {
-  TaskItem,
   TaskScopeFilter,
   TaskStatus,
-  TaskViewType,
 } from "@/features/tasks/types/task.types";
+import {
+  buildTasksBase,
+  mapTaskToBaseRow,
+} from "@/features/tasks/adapter/tasks-native-ui-adapter";
 import { useGetSpacesQuery } from "@/features/space/queries/space-query";
 import { useSpaceAbility } from "@/features/space/permissions/use-space-ability";
 import {
@@ -39,6 +27,7 @@ import {
 } from "@/features/space/permissions/permissions.type";
 import { ISpace } from "@/features/space/types/space.types";
 import { SpaceRole } from "@/lib/types";
+import useCurrentUser from "@/features/user/hooks/use-current-user";
 
 type TasksPageProps = {
   spaceId?: string;
@@ -56,57 +45,32 @@ export function TasksPageContent({
   spacePermissions,
 }: TasksPageProps & { spacePermissions?: any }) {
   const { t } = useTranslation();
-  const [view, setView] = useState<TaskViewType>("table");
+  const { data: currentUser } = useCurrentUser();
   const [scope, setScope] = useState<TaskScopeFilter>("all");
-  const [status, setStatus] = useState<TaskStatus | null>(null);
-  const [spaceFilter, setSpaceFilter] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editing, setEditing] = useState<TaskItem | null>(null);
-  const [createPreset, setCreatePreset] = useState<{
-    status?: TaskStatus;
-    spaceId?: string;
-  } | null>(null);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   const listParams = useMemo(() => {
     const isGlobal = !spaceId;
     return {
-      spaceId: spaceId ?? spaceFilter ?? undefined,
+      spaceId: spaceId ?? undefined,
       assignee: isGlobal && scope === "mine" ? ("me" as const) : undefined,
       due: isGlobal && scope === "overdue" ? ("overdue" as const) : undefined,
-      status: status ?? undefined,
       limit: 100,
     };
-  }, [spaceId, spaceFilter, scope, status]);
+  }, [spaceId, scope]);
 
-  const { data, isLoading, isError, hasNextPage, fetchNextPage, isFetchingNextPage } =
-    useTasksQuery(listParams);
+  const { data, isLoading, isError } = useTasksQuery(listParams);
   const createMutation = useCreateTaskMutation();
   const updateMutation = useUpdateTaskMutation();
   const { data: spacesData } = useGetSpacesQuery({ limit: 100 });
   const { data: spaceProperties } = useTaskPropertiesQuery(spaceId);
   const { data: views } = useTaskViewsQuery(spaceId);
-  const visiblePropertyIds = useMemo(() => {
-    const cfg = views?.find((v) => v.type === view)?.config;
-    return cfg?.visiblePropertyIds;
-  }, [views, view]);
 
   const tasks = data?.pages.flatMap((p) => p.items) ?? [];
   const allSpaces = (spacesData?.items ?? []) as ISpace[];
   const writableSpaces = useMemo(
     () => allSpaces.filter((s) => isWritableSpaceRole(s.membership?.role)),
     [allSpaces],
-  );
-  const spaceOptions = writableSpaces.map((s) => ({
-    value: s.id,
-    label: s.name,
-  }));
-  const spaceFilterOptions = allSpaces.map((s) => ({
-    value: s.id,
-    label: s.name,
-  }));
-  const writableSpaceIds = useMemo(
-    () => new Set(writableSpaces.map((s) => s.id)),
-    [writableSpaces],
   );
 
   const ability = useSpaceAbility(spacePermissions);
@@ -118,35 +82,83 @@ export function TasksPageContent({
     ? ability.can(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)
     : false;
   const canCreate = spaceId ? canEditInSpace : writableSpaces.length > 0;
-  const canManageShared = canManageInSpace;
+  const canManageProperties = spaceId ? canManageInSpace : false;
 
-  const canWriteTask = (task: TaskItem) => {
-    if (spaceId) return canEditInSpace;
-    return writableSpaceIds.has(task.spaceId);
-  };
+  const workspaceId =
+    currentUser?.user?.workspaceId ?? tasks[0]?.workspaceId ?? "";
 
-  const canManageTaskSpace = (task: TaskItem) => {
-    if (spaceId) return canManageInSpace;
-    const space = allSpaces.find((s) => s.id === task.spaceId);
-    return space?.membership?.role === SpaceRole.ADMIN;
-  };
+  const pageId = spaceId ?? `workspace-tasks:${workspaceId || "global"}`;
+  const customProperties = spaceProperties ?? [];
 
-  function openCreate(preset?: { status?: TaskStatus; spaceId?: string }) {
-    setEditing(null);
-    setCreatePreset(preset ?? null);
-    setDrawerOpen(true);
+  const base = useMemo(
+    () =>
+      buildTasksBase({
+        pageId,
+        workspaceId: workspaceId || "unknown",
+        spaceId: spaceId ?? pageId,
+        name: title ?? t("Tasks"),
+        includeSpace: !spaceId,
+        customProperties,
+        views: views ?? [],
+        canEdit: spaceId ? canEditInSpace : writableSpaces.length > 0,
+      }),
+    [
+      pageId,
+      workspaceId,
+      spaceId,
+      title,
+      t,
+      customProperties,
+      views,
+      canEditInSpace,
+      writableSpaces.length,
+    ],
+  );
+
+  const rows = useMemo(
+    () => tasks.map((task) => mapTaskToBaseRow(task, pageId, customProperties)),
+    [tasks, pageId, customProperties],
+  );
+
+  async function handleCreate(preset?: { status?: TaskStatus }) {
+    const targetSpaceId = spaceId ?? writableSpaces[0]?.id;
+    if (!targetSpaceId) {
+      notifications.show({
+        color: "red",
+        message: t("No writable space available"),
+      });
+      return;
+    }
+    try {
+      const created = await createMutation.mutateAsync({
+        spaceId: targetSpaceId,
+        title: "",
+        status: preset?.status ?? "todo",
+      });
+      setOpenRowId(created.id);
+    } catch (err: any) {
+      notifications.show({
+        color: "red",
+        message: err?.response?.data?.message ?? t("Failed to create task"),
+      });
+    }
   }
 
-  function openTask(task: TaskItem) {
-    setCreatePreset(null);
-    setEditing(task);
-    setDrawerOpen(true);
+  async function handleStatusChange(rowId: string, status: TaskStatus) {
+    try {
+      await updateMutation.mutateAsync({ taskId: rowId, status });
+    } catch (err: any) {
+      notifications.show({
+        color: "red",
+        message: err?.response?.data?.message ?? t("Failed to update task"),
+      });
+    }
   }
 
   if (isLoading) {
     return (
-      <Container size="xl" py="xl">
-        <Title order={2} mb="lg">
+      <Container fluid p="md">
+        <Title order={3} mb="md">
           {title ?? t("Tasks")}
         </Title>
         <PageListSkeleton />
@@ -156,8 +168,8 @@ export function TasksPageContent({
 
   if (isError) {
     return (
-      <Container size="xl" py="xl">
-        <Title order={2} mb="lg">
+      <Container fluid p="md">
+        <Title order={3} mb="md">
           {title ?? t("Tasks")}
         </Title>
         <Text>{t("Failed to load tasks")}</Text>
@@ -166,108 +178,38 @@ export function TasksPageContent({
   }
 
   return (
-    <Container size="xl" py="xl">
-      <Stack gap="md">
-        <Title order={2}>{title ?? t("Tasks")}</Title>
-        {!spaceId && (
-          <TasksScopeTabs value={scope} onChange={setScope} />
-        )}
-        <Group justify="space-between" wrap="wrap">
-          <TasksViewTabs value={view} onChange={setView} />
-          <TasksSavedViews
-            spaceId={spaceId}
-            currentType={view}
-            onSelectType={setView}
-            canManageShared={canManageShared}
-          />
-        </Group>
-        <TasksToolbar
-          status={status}
-          onStatusChange={setStatus}
-          canCreate={canCreate}
-          onCreate={() => openCreate()}
-          showSpaceFilter={!spaceId}
-          spaceFilter={spaceFilter}
-          onSpaceFilterChange={setSpaceFilter}
-          spaceFilterOptions={spaceFilterOptions}
-        />
-        {tasks.length === 0 ? (
-          <EmptyState
-            icon={IconChecklist}
-            title={t("No tasks yet")}
-            description={t("Create a task to get started")}
-          />
-        ) : view === "table" ? (
-          <TasksTable
-            tasks={tasks}
-            showSpace={!spaceId}
-            canWriteTask={canWriteTask}
-            onOpen={openTask}
-          />
-        ) : (
-          <TasksKanban
-            tasks={tasks}
-            showSpace={!spaceId}
-            canWriteTask={canWriteTask}
-            canCreate={canCreate}
-            properties={spaceProperties}
-            visiblePropertyIds={visiblePropertyIds}
-            onOpen={openTask}
-            onAddInColumn={(status) =>
-              openCreate({
-                status,
-                spaceId: spaceId ?? spaceFilter ?? undefined,
-              })
-            }
-            onStatusChange={(taskId, nextStatus) => {
-              const task = tasks.find((item) => item.id === taskId);
-              if (!task || !canWriteTask(task)) return;
-              updateMutation.mutate({ taskId, status: nextStatus });
-            }}
-          />
-        )}
-        {hasNextPage && (
-          <Button
-            variant="default"
-            loading={isFetchingNextPage}
-            onClick={() => fetchNextPage()}
-          >
-            {t("Load more")}
-          </Button>
-        )}
-      </Stack>
-
-      <TaskDetailDrawer
-        opened={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-          setEditing(null);
-          setCreatePreset(null);
-        }}
-        task={editing}
-        tasks={tasks}
-        onNavigate={(task) => setEditing(task)}
-        spaceId={spaceId ?? createPreset?.spaceId}
-        spaceOptions={spaceOptions}
-        presetStatus={createPreset?.status}
-        canEdit={
-          editing
-            ? canWriteTask(editing)
-            : Boolean(spaceId ? canEditInSpace : writableSpaces.length > 0)
-        }
-        canManageProperties={
-          editing
-            ? canManageTaskSpace(editing)
-            : Boolean(spaceId && canManageInSpace)
-        }
-        createMutation={createMutation}
-        updateMutation={updateMutation}
+    <Container
+      fluid
+      p="md"
+      style={{
+        height: "calc(100vh - 60px)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <Title order={3} mb="xs">
+        {title ?? t("Tasks")}
+      </Title>
+      <TasksNativeShell
+        base={base}
+        rows={rows}
+        customProperties={customProperties}
+        isGlobal={!spaceId}
+        scope={scope}
+        canCreate={canCreate}
+        canManageProperties={canManageProperties}
+        propertySpaceId={spaceId}
+        createSpaceId={spaceId ?? writableSpaces[0]?.id}
+        onCreate={handleCreate}
+        onStatusChange={handleStatusChange}
+        onScopeChange={setScope}
+        openRowId={openRowId}
+        onOpenRow={setOpenRowId}
       />
     </Container>
   );
 }
 
 export default function TasksPage() {
-  const { t } = useTranslation();
-  return <TasksPageContent title={t("Tasks")} />;
+  return <TasksPageContent />;
 }

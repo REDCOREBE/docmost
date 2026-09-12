@@ -29,6 +29,7 @@ type BaseTableProps = {
   persistViewConfig: () => void;
   scrollportRef: React.RefObject<HTMLDivElement>;
   aboveBand?: React.ReactNode;
+  addRowLabel?: string;
 };
 
 export function BaseTable({
@@ -48,6 +49,7 @@ export function BaseTable({
   onRowReorder,
   scrollportRef,
   aboveBand,
+  addRowLabel,
 }: BaseTableProps) {
   return (
     <GridContainer
@@ -65,6 +67,7 @@ export function BaseTable({
       onFetchNextPage={onFetchNextPage}
       scrollElement={embedded ? window : scrollportRef.current}
       aboveBand={aboveBand ?? null}
+      addRowLabel={addRowLabel}
     />
   );
 }

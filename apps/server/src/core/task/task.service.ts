@@ -131,7 +131,7 @@ export class TaskService {
         {
           workspaceId,
           spaceId: dto.spaceId,
-          title: dto.title.trim(),
+          title: (dto.title ?? '').trim(),
           description: dto.description ?? null,
           status,
           priority: dto.priority ?? 'none',

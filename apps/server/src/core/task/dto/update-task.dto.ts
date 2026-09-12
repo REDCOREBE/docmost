@@ -10,7 +10,6 @@ import {
   Max,
   MaxLength,
   Min,
-  MinLength,
 } from 'class-validator';
 
 export class UpdateTaskDto {
@@ -19,7 +18,6 @@ export class UpdateTaskDto {
 
   @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(500)
   title?: string;
 

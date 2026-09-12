@@ -125,7 +125,8 @@ export interface ListTasksParams {
 
 export interface CreateTaskParams {
   spaceId: string;
-  title: string;
+  /** Empty string creates an untitled task (Base parity). */
+  title?: string;
   description?: string;
   status?: TaskStatus;
   priority?: TaskPriority;

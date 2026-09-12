@@ -31,7 +31,7 @@
 
 - `/tasks` scope tabs + Space filter + Space badge on rows/cards
 - Table / Kanban / DnD status / + New task in column
-- Drawer Esc, system rows, add property (admin)
+- Row detail modal Esc, system rows, add property (admin)
 - Dark mode / mobile overflow
 - Reader: open read-only; no create / no add property
 

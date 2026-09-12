@@ -4,6 +4,7 @@ import { IBaseRow, IBaseProperty } from "@/ee/base/types/base.types";
 import { GridHeaderCell } from "./grid-header-cell";
 import { CreatePropertyPopover } from "@/ee/base/components/property/create-property-popover";
 import { useBaseEditable } from "@/ee/base/context/base-editable";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import classes from "@/ee/base/styles/grid.module.css";
 
 type GridHeaderProps = {
@@ -33,6 +34,9 @@ export const GridHeader = memo(function GridHeader({
 }: GridHeaderProps) {
   const headerGroups = table.getHeaderGroups();
   const editable = useBaseEditable();
+  const ports = useBaseDataPorts();
+  const showCreateProperty =
+    editable && (!ports?.disableSchemaMutations || !!ports.createProperty);
   const propertyById = useMemo(() => {
     const map = new Map<string, IBaseProperty>();
     for (const p of properties) map.set(p.id, p);
@@ -52,7 +56,7 @@ export const GridHeader = memo(function GridHeader({
           onColumnReorder={onColumnReorder}
         />
       ))}
-      {editable && (
+      {showCreateProperty && (
         <CreatePropertyPopover
           pageId={pageId}
           properties={properties}

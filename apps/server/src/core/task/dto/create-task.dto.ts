@@ -4,25 +4,23 @@ import {
   IsDateString,
   IsIn,
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   Max,
   MaxLength,
   Min,
-  MinLength,
 } from 'class-validator';
 
 export class CreateTaskDto {
   @IsUUID()
   spaceId: string;
 
+  /** Empty string = untitled task (Base-parity). Omitted → treated as "". */
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  @MinLength(1)
   @MaxLength(500)
-  title: string;
+  title?: string;
 
   @IsOptional()
   @IsString()

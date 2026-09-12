@@ -24,6 +24,7 @@ import {
 } from "@/ee/base/types/base.types";
 import { useUpdateViewMutation } from "@/ee/base/queries/base-view-query";
 import { systemAccessorFor } from "@/ee/base/property-types/property-type.registry";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 
 const DEFAULT_COLUMN_WIDTH = 180;
 const MIN_COLUMN_WIDTH = 80;
@@ -197,6 +198,7 @@ export function useBaseTable(
   activeView: IBaseView | undefined,
 ): UseBaseTableResult {
   const updateViewMutation = useUpdateViewMutation();
+  const ports = useBaseDataPorts();
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // While a local edit is pending the reconcile effect preserves local state
   // to avoid stomping in-flight toggles. When idle it adopts server state so
@@ -358,19 +360,27 @@ export function useBaseTable(
     persistTimerRef.current = setTimeout(() => {
       persistTimerRef.current = null;
       const config = buildLayoutConfigPatch(table);
-      updateViewMutation.mutate(
-        { viewId: activeView.id, pageId: base.id, config },
-        {
-          onSettled: () => {
-            // Only clear if no new debounce was scheduled while in flight.
-            if (persistTimerRef.current === null) {
-              setHasPendingEdit(false);
-            }
-          },
+      const payload = { viewId: activeView.id, pageId: base.id, config };
+      if (ports?.persistViewConfig) {
+        try {
+          ports.persistViewConfig(payload);
+        } finally {
+          if (persistTimerRef.current === null) {
+            setHasPendingEdit(false);
+          }
+        }
+        return;
+      }
+      updateViewMutation.mutate(payload, {
+        onSettled: () => {
+          // Only clear if no new debounce was scheduled while in flight.
+          if (persistTimerRef.current === null) {
+            setHasPendingEdit(false);
+          }
         },
-      );
+      });
     }, 300);
-  }, [activeView, base, table, updateViewMutation]);
+  }, [activeView, base, table, updateViewMutation, ports]);
 
   return { table, persistViewConfig };
 }

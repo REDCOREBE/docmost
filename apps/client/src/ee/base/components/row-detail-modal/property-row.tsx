@@ -6,6 +6,7 @@ import { IBaseProperty, IBaseRow } from "@/ee/base/types/base.types";
 import { getDescriptor } from "@/ee/base/property-types/property-type.registry";
 import { PropertyMenuContent } from "@/ee/base/components/property/property-menu";
 import { useBaseEditable } from "@/ee/base/context/base-editable";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import { DetailField } from "./fields/detail-field";
 import classes from "@/ee/base/styles/row-detail-modal.module.css";
 
@@ -33,6 +34,8 @@ export function PropertyRow({
   onAutoFocused,
 }: PropertyRowProps) {
   const canEdit = useBaseEditable();
+  const ports = useBaseDataPorts();
+  const allowSchemaEdit = canEdit && !ports?.disableSchemaMutations;
   const rowRef = useRef<HTMLDivElement>(null);
   const focusedRef = useRef(false);
 
@@ -66,7 +69,7 @@ export function PropertyRow({
 
   return (
     <div className={classes.propertyRow} ref={rowRef}>
-      {canEdit ? (
+      {allowSchemaEdit ? (
         <Popover
           opened={menuOpened}
           position="bottom-start"

@@ -1,51 +1,60 @@
-# UI
+# UI — Native Docmost Base presentation
 
 ## Principles
 
-- Same UX language as Docmost (Mantine, Tabler, light-dark tokens)
-- **Independent** implementation — do not import `apps/client/src/ee/base/**`
-- Do not copy EE CSS (`kanban.module.css`, `grid.module.css`, `choice-color.ts`, row-detail CSS)
-- Visual target may be observed from Bases; reimplement tokens under `features/tasks/styles/tasks.module.css`
+- **Visual fidelity**: reuse EE Base **presentation leaves + CSS modules**.
+- **Data isolation**: never call `BaseService` / `base_*`. Mutations → Task API via `BaseDataPorts`.
+- **No drop-in `BaseView`**: Tasks owns the orchestrator shell; injects ports into native Base components.
+- Licence: see [LICENCE.md](./LICENCE.md).
 
-## Reuse (AGPL / Mantine)
+## Architecture
 
-`Drawer`, `Table`, `Badge`, `Progress`, `Tabs`, `Menu`, `ActionIcon`, `ScrollArea`, `Tooltip`, `Popover`, `Select`, `MultiSelect`, `DateInput`, `CustomAvatar`, `EmptyState`, pragmatic-drag-and-drop.
+```
+pages/tasks/*  →  TasksNativeShell (+ BaseDataPortsProvider)
+                    ├─ BaseTable (table)
+                    ├─ BaseKanban / KanbanColumn (kanban, Pragmatic DnD)
+                    └─ RowDetailModal (+ CreatePropertyPopover)
+                         ↑
+              TasksNativeUiAdapter (IBase* shapes) + ports → /api/tasks*
+```
 
-## Own components
+| Layer | Path | Role |
+|-------|------|------|
+| Adapter | `features/tasks/adapter/tasks-native-ui-adapter.ts` | Task ↔ `IBase*`; `filterTaskRows`; type snake↔camel |
+| Shell | `…/tasks-native-shell.tsx` | View tabs + Filter/Sort/Visibility + Group-by + Card properties + ports |
+| Table | `…/tasks-native-table.tsx` | Native `BaseTable` / `useBaseTable` |
+| Kanban | `…/tasks-native-kanban.tsx` | Thin wrapper → `BaseKanban` |
+| Detail | EE `RowDetailModal` | Native modal; Task mutations via ports |
 
-Under `apps/client/src/features/tasks/components/`:
+## Deleted lookalike UI
 
-- `TasksScopeTabs` — Tout / Mes tâches / En retard (global)
-- `TasksViewTabs` — Table / Board
-- `TasksToolbar`, `TasksTable`, `TasksKanban` (+ Column/Card)
-- `TaskDetailDrawer` — title + system property rows + custom props
-- `properties/task-add-property-menu`, `properties/task-property-editors`
-- Badges/avatars/due/progress helpers
+`tasks-table`, `tasks-kanban`, `task-detail-drawer`, `tasks-toolbar`, custom `task-row-detail-modal`, etc.
 
-Legacy `task-editor-modal.tsx` is unused in V2 (kept only if referenced; prefer drawer).
+## Routes
 
-## Kanban target
+| Route | Behaviour |
+|-------|-----------|
+| `/s/:spaceSlug/tasks` | Native shell; create untitled + open detail |
+| `/tasks` | Same + scope tabs All / My tasks / Overdue |
 
-- Columns ~280px, radius ~10px, soft gray background (no heavy outer border)
-- Header: status dot, title, count, `+`, `…`
-- Cards: radius ~8px, light border, subtle shadow, padding ~12px
-- Footer: + New task
-- DnD independent; disabled without write permission
+## Known gaps (KNOWN MINOR GAPS)
 
-## Detail drawer target
+| Gap | Class | Blocker? |
+|-----|-------|----------|
+| View tabs custom (not data-bound `ViewTabs`) — **8.5/10** | visuelle | no |
+| Add view `+` without CRUD | fonctionnel | no |
+| CSV export absent (contrôle masqué) | fonctionnel | no |
+| person/page cell hydration limited | fonctionnel | no |
+| Advanced grouping beyond status/select | fonctionnel | no |
+| Dark mode — dedicated re-smoke in packaging freeze (target ≥ 9.5) | visuelle | soft |
+| `/api/bases` from `CellPage` | mitigated (`pageId: ""`) | watch |
 
-- Top bar: prev/next, `…`, close; Esc closes
-- Large editable title
-- Rows: `[icon] [label ~180px] [value]`
-- System props from `task_items` (not EAV)
-- `+ Ajouter une propriété` (Manage Settings)
+See also [V2.md](./V2.md) freeze marker + ports in [UPSTREAM-PATCHES.md](./UPSTREAM-PATCHES.md).
 
 ## Status labels (FR via i18n)
 
-- todo → À faire
-- in_progress → En cours
-- done → Terminé
+- todo → À faire · in_progress → En cours · done → Terminé
 
-## Sidebar label
+## Sidebar
 
-Always **"Tasks"** / **"Tâches"**. Global default scope tab = **Tout**.
+Always **"Tasks"** / **"Tâches"**. Global default scope = **All**.

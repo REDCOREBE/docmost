@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Button, Group, Popover, Text, TextInput, UnstyledButton } from "@mantine/core";
 import { IBaseProperty, KanbanColumn, SelectTypeOptions } from "@/ee/base/types/base.types";
 import { useUpdatePropertyMutation } from "@/ee/base/queries/base-property-query";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import classes from "@/ee/base/styles/kanban.module.css";
+
 
 type KanbanColumnTitleProps = {
   column: KanbanColumn;
@@ -14,9 +16,12 @@ type KanbanColumnTitleProps = {
 
 export function KanbanColumnTitle({ column, property, pageId, canEdit }: KanbanColumnTitleProps) {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
+  const schemaEditable = canEdit && !ports?.disableSchemaMutations;
   const [opened, setOpened] = useState(false);
   const [draft, setDraft] = useState("");
   const updateProperty = useUpdatePropertyMutation();
+
 
   const commit = useCallback(() => {
     setOpened(false);
@@ -47,7 +52,7 @@ export function KanbanColumnTitle({ column, property, pageId, canEdit }: KanbanC
 
   const cancel = useCallback(() => setOpened(false), []);
 
-  if (!canEdit || column.isNoValue || !property) {
+  if (!schemaEditable || column.isNoValue || !property) {
     return (
       <Text fw={600} size="sm" flex={1} truncate>
         {column.isNoValue ? t("No value") : column.name}

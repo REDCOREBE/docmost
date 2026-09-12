@@ -5,10 +5,13 @@ import classes from "@/ee/base/styles/grid.module.css";
 
 type AddRowButtonProps = {
   onClick?: () => void;
+  /** Override default i18n "New row" (e.g. Tasks → "New task"). */
+  label?: string;
 };
 
 export const AddRowButton = memo(function AddRowButton({
   onClick,
+  label,
 }: AddRowButtonProps) {
   const { t } = useTranslation();
 
@@ -26,7 +29,7 @@ export const AddRowButton = memo(function AddRowButton({
       tabIndex={0}
     >
       <IconPlus size={14} />
-      <span>{t("New row")}</span>
+      <span>{label ?? t("New row")}</span>
     </div>
   );
 });

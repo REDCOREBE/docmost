@@ -29,6 +29,7 @@ import { notifications } from "@mantine/notifications";
 import { queryClient } from "@/main";
 import { useTranslation } from "react-i18next";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 
 export function useCreateViewMutation() {
   const { t } = useTranslation();
@@ -57,9 +58,34 @@ export function useCreateViewMutation() {
 
 export function useUpdateViewMutation() {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
   return useMutation<IBaseView, Error, UpdateViewInput, { previous: IBase | undefined }>({
-    mutationFn: (data) => updateView(data),
+    mutationFn: async (data) => {
+      if (ports?.persistViewConfig && data.config !== undefined) {
+        ports.persistViewConfig({
+          viewId: data.viewId,
+          pageId: data.pageId,
+          config: data.config,
+        });
+        return {
+          id: data.viewId,
+          pageId: data.pageId,
+          name: data.name ?? "",
+          type: data.type ?? "table",
+          position: data.position ?? "a0",
+          config: (data.config ?? {}) as ViewConfig,
+          workspaceId: "",
+          creatorId: "",
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        };
+      }
+      return updateView(data);
+    },
     onMutate: async (variables) => {
+      if (ports?.persistViewConfig) {
+        return { previous: undefined };
+      }
       await queryClient.cancelQueries({
         queryKey: ["bases", variables.pageId],
       });
@@ -101,6 +127,7 @@ export function useUpdateViewMutation() {
       return { previous };
     },
     onError: (error, variables, context) => {
+      if (ports?.persistViewConfig) return;
       if (context?.previous) {
         queryClient.setQueryData(
           ["bases", variables.pageId],
@@ -113,6 +140,7 @@ export function useUpdateViewMutation() {
       });
     },
     onSuccess: (updatedView) => {
+      if (ports?.persistViewConfig) return;
       queryClient.setQueryData<IBase>(
         ["bases", updatedView.pageId],
         (old) => {

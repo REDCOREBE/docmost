@@ -64,7 +64,7 @@ export function taskInfoQueryKey(taskId: string) {
   return ["task", taskId] as const;
 }
 
-/** Detail hydration for TaskDetailDrawer — not used by list(). */
+/** Detail hydration for RowDetailModal deep-links — not used by list(). */
 export function useTaskInfoQuery(taskId?: string) {
   return useQuery({
     queryKey: taskInfoQueryKey(taskId ?? ""),

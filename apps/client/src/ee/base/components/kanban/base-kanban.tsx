@@ -15,9 +15,11 @@ import { buildColumnFilter } from "@/ee/base/services/kanban-column-filter";
 import { resolveCardDrop } from "@/ee/base/hooks/use-kanban-card-drop";
 import { useKanbanBoardAutoScroll } from "@/ee/base/hooks/use-kanban-autoscroll";
 import { useRowDetailModal } from "@/ee/base/hooks/use-row-detail-modal";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import { KanbanColumn } from "@/ee/base/components/kanban/kanban-column";
 import { KanbanEmptyState } from "@/ee/base/components/kanban/kanban-empty-state";
 import classes from "@/ee/base/styles/kanban.module.css";
+
 
 type BaseKanbanProps = {
   base: IBase;
@@ -30,14 +32,34 @@ type BaseKanbanProps = {
 
 export function BaseKanban({ base, view, pageId, embedded, editable, viewFilter }: BaseKanbanProps) {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
   const { groupByPropertyId, groupByProperty, columns, hasValidGroupBy } = useKanbanColumns(base, view);
   const updateView = useUpdateViewMutation();
   const moveCard = useKanbanMoveCardMutation();
-  const { openRow } = useRowDetailModal(pageId);
+  const { openRow: openRowFromUrl } = useRowDetailModal(pageId);
 
-  const openRowRef = useRef(openRow);
-  useLayoutEffect(() => { openRowRef.current = openRow; });
+  const openRowRef = useRef(openRowFromUrl);
+  useLayoutEffect(() => {
+    openRowRef.current = (id: string) => {
+      if (ports?.openRow) {
+        ports.openRow(id);
+        return;
+      }
+      openRowFromUrl(id);
+    };
+  });
   const handleOpenRow = useCallback((id: string) => openRowRef.current(id), []);
+
+  const persistConfig = useCallback(
+    (config: { hiddenChoiceIds?: string[]; choiceOrder?: string[] }) => {
+      if (ports?.persistViewConfig) {
+        ports.persistViewConfig({ viewId: view.id, pageId, config });
+        return;
+      }
+      updateView.mutate({ viewId: view.id, pageId, config });
+    },
+    [ports, updateView, view.id, pageId],
+  );
 
   const boardRef = useRef<HTMLDivElement>(null);
   useKanbanBoardAutoScroll(boardRef, pageId);
@@ -61,9 +83,9 @@ export function BaseKanban({ base, view, pageId, embedded, editable, viewFilter 
   const hideColumn = useCallback(
     (key: string) => {
       const next = Array.from(new Set([...(view.config?.hiddenChoiceIds ?? []), key]));
-      updateView.mutate({ viewId: view.id, pageId, config: { hiddenChoiceIds: next } });
+      persistConfig({ hiddenChoiceIds: next });
     },
-    [updateView, view.id, view.config?.hiddenChoiceIds, pageId],
+    [persistConfig, view.config?.hiddenChoiceIds],
   );
 
   const onCardDropRef = useRef<(args: {
@@ -88,16 +110,27 @@ export function BaseKanban({ base, view, pageId, embedded, editable, viewFilter 
       if (!result) return;
       const sourceFilter = buildColumnFilter(viewFilter, groupByPropertyId, sourceColumnKey);
       const destFilter = buildColumnFilter(viewFilter, groupByPropertyId, targetColumnKey);
-      moveCard.mutate({
-        pageId,
-        rowId: draggedRowId,
-        sourceColumnFilter: sourceFilter,
-        destColumnFilter: destFilter,
-        columnChanged: result.columnChanged,
-        groupByPropertyId,
-        destChoiceValue: result.destChoiceValue,
-        position: result.position,
-      });
+      if (ports?.moveKanbanCard) {
+        void ports.moveKanbanCard({
+          pageId,
+          rowId: draggedRowId,
+          groupByPropertyId,
+          destChoiceValue: result.destChoiceValue,
+          position: result.position,
+          columnChanged: result.columnChanged,
+        });
+      } else {
+        moveCard.mutate({
+          pageId,
+          rowId: draggedRowId,
+          sourceColumnFilter: sourceFilter,
+          destColumnFilter: destFilter,
+          columnChanged: result.columnChanged,
+          groupByPropertyId,
+          destChoiceValue: result.destChoiceValue,
+          position: result.position,
+        });
+      }
       const el = cardRefs.current.get(draggedRowId)?.el;
       if (el) triggerPostMoveFlash(el);
       const targetColumnName = columns.find((c) => c.key === targetColumnKey)?.name ?? "";
@@ -150,7 +183,7 @@ export function BaseKanban({ base, view, pageId, embedded, editable, viewFilter 
         });
         if (finishIndex === visStart) return;
         const reorderedVisible = reorder({ list: visibleKeys, startIndex: visStart, finishIndex });
-        updateView.mutate({ viewId: view.id, pageId, config: { choiceOrder: [...reorderedVisible, ...(view.config?.hiddenChoiceIds ?? [])] } });
+        persistConfig({ choiceOrder: [...reorderedVisible, ...(view.config?.hiddenChoiceIds ?? [])] });
       } else {
         const finishIndex = getReorderDestinationIndex({
           startIndex,
@@ -160,7 +193,7 @@ export function BaseKanban({ base, view, pageId, embedded, editable, viewFilter 
         });
         if (finishIndex === startIndex) return;
         const newChoiceOrder = reorder({ list: fullOrder, startIndex, finishIndex });
-        updateView.mutate({ viewId: view.id, pageId, config: { choiceOrder: newChoiceOrder } });
+        persistConfig({ choiceOrder: newChoiceOrder });
       }
 
       const targetColumnName = columns.find((c) => c.key === targetColumnKey)?.name ?? "";

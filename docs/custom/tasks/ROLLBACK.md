@@ -5,15 +5,34 @@
 | Tag | Meaning |
 |-----|---------|
 | `pre-tasks-native-v1` | Before Tasks V1 |
-| `pre-tasks-v2` | Before Tasks V2 (on `feature/tasks-v2-native-ux`) |
+| `pre-tasks-v2` | Before Tasks V2 |
+| `tasks-native-ui-v2-validated` | Source freeze: native UI ports validated (do not move) |
 
 ```bash
-git diff pre-tasks-v2..feature/tasks-v2-native-ux --stat
+git show tasks-native-ui-v2-validated --stat
+git diff tasks-native-ui-v2-validated^..tasks-native-ui-v2-validated --stat
 ```
+
+## Packaging rollback (ops)
+
+| Image | Role |
+|-------|------|
+| `redcore-docmost-c2:0.95.0-r15-final` | Current prod baseline (pre native-UI cutover) |
+| `redcore-docmost-c2:0.95.0-r16-native-ui-test` | Intermediate smoke — do not promote |
+| `redcore-docmost-c2:0.95.0-r16-native-ui-final` | Candidate package for cutover |
+
+Cutover reverse: point compose back to `r15-final`, recreate app container only (same DB). No `task_*` drop required for UI rollback.
+
+## UI-only rollback (keep Task API + `task_*`)
+
+1. Revert `apps/client/src/features/tasks/adapter/` and `components/native/`.
+2. Revert EE `BaseDataPorts` patches listed in [UPSTREAM-PATCHES.md](./UPSTREAM-PATCHES.md).
+3. Restore previous Tasks pages wiring if needed.
+4. No DB change.
 
 ## Remove V2 only (keep V1 Tasks)
 
-1. Revert client V2 UI (drawer, scope tabs, property editors) or checkout V1 feature tip.
+1. Revert native UI / V2 client (or checkout V1 feature tip).
 2. Remove property endpoints from `task.controller.ts` / methods from `task.service.ts`.
 3. Remove `TaskProperty*Repo` from `database.module.ts`.
 4. Remove V2 types from `db.d.ts` / `entity.types.ts`.
@@ -49,10 +68,7 @@ DELETE FROM kysely_migration WHERE name IN (
 
 ## Confirmed intact after Tasks work
 
-- `pages`
-- `spaces`
-- `users`
-- `base_*`
+- `pages` · `spaces` · `users` · `base_*`
 
 Space hard-delete remains CASCADE via FK — no `SpaceService` change.
 

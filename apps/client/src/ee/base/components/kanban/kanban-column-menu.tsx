@@ -12,6 +12,8 @@ import {
   MenuItem,
   PropertyMenuContent,
 } from "@/ee/base/components/property/property-menu";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
+
 
 type KanbanColumnMenuProps = {
   property: IBaseProperty;
@@ -21,8 +23,11 @@ type KanbanColumnMenuProps = {
 
 export function KanbanColumnMenu({ property, pageId, onHide }: KanbanColumnMenuProps) {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
+  const allowSchemaEdit = !ports?.disableSchemaMutations;
   const [opened, setOpened] = useState(false);
   const [view, setView] = useState<"menu" | "property">("menu");
+
   const [dirty, setDirty] = useAtom(propertyMenuDirtyAtomFamily(pageId)) as unknown as [boolean, (val: boolean) => void];
   const [closeRequest, setCloseRequest] = useAtom(propertyMenuCloseRequestAtomFamily(pageId)) as unknown as [number, (val: number) => void];
 
@@ -87,13 +92,15 @@ export function KanbanColumnMenu({ property, pageId, onHide }: KanbanColumnMenuP
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
-        {view === "menu" ? (
+        {view === "menu" || !allowSchemaEdit ? (
           <Stack gap={0} p={4}>
-            <MenuItem
-              icon={<IconSettings size={14} />}
-              label={t("Edit property")}
-              onClick={() => setView("property")}
-            />
+            {allowSchemaEdit && (
+              <MenuItem
+                icon={<IconSettings size={14} />}
+                label={t("Edit property")}
+                onClick={() => setView("property")}
+              />
+            )}
             <MenuItem
               icon={<IconEyeOff size={14} />}
               label={t("Hide group")}

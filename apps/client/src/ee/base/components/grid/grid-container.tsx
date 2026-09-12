@@ -90,6 +90,8 @@ type GridContainerProps = {
    * null (they render outside the scrollport instead).
    */
   aboveBand?: React.ReactNode;
+  /** Override add-row button label (default i18n "New row"). */
+  addRowLabel?: string;
 };
 
 export function GridContainer({
@@ -107,6 +109,7 @@ export function GridContainer({
   isFiltered,
   scrollElement,
   aboveBand,
+  addRowLabel,
 }: GridContainerProps) {
   const headerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -556,7 +559,9 @@ export function GridContainer({
                 onCreate={editable ? handleAddRow : undefined}
               />
             )}
-            {editable && <AddRowButton onClick={handleAddRow} />}
+            {editable && (
+              <AddRowButton onClick={handleAddRow} label={addRowLabel} />
+            )}
             {pageId && <SelectionActionBar pageId={pageId} />}
           </div>
         </GridRowOrderProvider>

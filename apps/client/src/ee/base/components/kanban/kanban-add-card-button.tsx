@@ -4,9 +4,11 @@ import classes from "@/ee/base/styles/kanban.module.css";
 
 type KanbanAddCardButtonProps = {
   onAddCard: () => void;
+  /** Override default i18n "New row" (e.g. Tasks → "New task"). */
+  label?: string;
 };
 
-export function KanbanAddCardButton({ onAddCard }: KanbanAddCardButtonProps) {
+export function KanbanAddCardButton({ onAddCard, label }: KanbanAddCardButtonProps) {
   const { t } = useTranslation();
   return (
     <div
@@ -22,7 +24,7 @@ export function KanbanAddCardButton({ onAddCard }: KanbanAddCardButtonProps) {
       }}
     >
       <IconPlus size={16} />
-      {t("New row")}
+      {label ?? t("New row")}
     </div>
   );
 }

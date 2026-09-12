@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { IBase, IBaseView } from "@/ee/base/types/base.types";
 import { useUpdateViewMutation } from "@/ee/base/queries/base-view-query";
 import { useCreatePropertyMutation } from "@/ee/base/queries/base-property-query";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 
 type KanbanEmptyStateProps = {
   base: IBase;
@@ -15,6 +16,7 @@ type KanbanEmptyStateProps = {
 
 export function KanbanEmptyState({ base, view, pageId, editable }: KanbanEmptyStateProps) {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
   const updateView = useUpdateViewMutation();
   const createProperty = useCreatePropertyMutation();
 
@@ -36,34 +38,36 @@ export function KanbanEmptyState({ base, view, pageId, editable }: KanbanEmptySt
   );
 
   const handleCreateStatus = useCallback(() => {
+    if (ports?.disableSchemaMutations) return;
     const todoId = generateBaseChoiceId();
     const inProgressId = generateBaseChoiceId();
     const completeId = generateBaseChoiceId();
-    createProperty.mutate(
-      {
+    const payload = {
+      pageId,
+      name: t("Status"),
+      type: "status" as const,
+      typeOptions: {
+        choices: [
+          { id: todoId, name: t("Not started"), color: "gray", category: "todo" as const },
+          { id: inProgressId, name: t("In progress"), color: "blue", category: "inProgress" as const },
+          { id: completeId, name: t("Done"), color: "green", category: "complete" as const },
+        ],
+        choiceOrder: [todoId, inProgressId, completeId],
+      },
+    };
+    const onCreated = (newProperty: { id: string }) => {
+      updateView.mutate({
+        viewId: view.id,
         pageId,
-        name: t("Status"),
-        type: "status",
-        typeOptions: {
-          choices: [
-            { id: todoId, name: t("Not started"), color: "gray", category: "todo" },
-            { id: inProgressId, name: t("In progress"), color: "blue", category: "inProgress" },
-            { id: completeId, name: t("Done"), color: "green", category: "complete" },
-          ],
-          choiceOrder: [todoId, inProgressId, completeId],
-        },
-      },
-      {
-        onSuccess: (newProperty) => {
-          updateView.mutate({
-            viewId: view.id,
-            pageId,
-            config: { groupByPropertyId: newProperty.id },
-          });
-        },
-      },
-    );
-  }, [createProperty, updateView, view.id, pageId, t]);
+        config: { groupByPropertyId: newProperty.id },
+      });
+    };
+    if (ports?.createProperty) {
+      void ports.createProperty(payload).then(onCreated);
+      return;
+    }
+    createProperty.mutate(payload, { onSuccess: onCreated });
+  }, [ports, createProperty, updateView, view.id, pageId, t]);
 
   if (!editable) {
     return (
@@ -84,6 +88,10 @@ export function KanbanEmptyState({ base, view, pageId, editable }: KanbanEmptySt
           onChange={handleSelect}
           w={240}
         />
+      ) : ports?.disableSchemaMutations ? (
+        <Text c="dimmed" size="sm">
+          {t("No grouping property available.")}
+        </Text>
       ) : (
         <Button
           variant="light"

@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { generateJitteredKeyBetween } from "fractional-indexing-jittered";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { type IBase, type IBaseProperty, type IBaseRow, type IBaseView, type FilterGroup, type KanbanColumn as KanbanColumnType, KANBAN_CARD_DRAG_TYPE } from "@/ee/base/types/base.types";
+import {
+  type IBase,
+  type IBaseProperty,
+  type IBaseRow,
+  type IBaseView,
+  type FilterGroup,
+  type KanbanColumn as KanbanColumnType,
+  KANBAN_CARD_DRAG_TYPE,
+} from "@/ee/base/types/base.types";
 import { buildColumnFilter } from "@/ee/base/services/kanban-column-filter";
 import { formatKanbanCount } from "@/ee/base/services/format-kanban-count";
 import { useKanbanColumnAutoScroll } from "@/ee/base/hooks/use-kanban-autoscroll";
 import { useBaseRowsQuery } from "@/ee/base/queries/base-row-query";
 import { useKanbanCreateCardMutation } from "@/ee/base/queries/base-row-query";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import { KanbanColumnHeader } from "@/ee/base/components/kanban/kanban-column-header";
 import { KanbanAddCardButton } from "@/ee/base/components/kanban/kanban-add-card-button";
 import { KanbanCard } from "@/ee/base/components/kanban/kanban-card";
@@ -23,7 +32,11 @@ type KanbanColumnProps = {
   canEdit: boolean;
   onOpenRow: (rowId: string) => void;
   onHide: (columnKey: string) => void;
-  registerCardRef: (rowId: string, columnKey: string, el: HTMLDivElement | null) => void;
+  registerCardRef: (
+    rowId: string,
+    columnKey: string,
+    el: HTMLDivElement | null,
+  ) => void;
   registerColumnRows: (columnKey: string, rows: IBaseRow[]) => void;
 };
 
@@ -41,15 +54,27 @@ export function KanbanColumn({
   registerCardRef,
   registerColumnRows,
 }: KanbanColumnProps) {
+  const ports = useBaseDataPorts();
   const filter = useMemo(
     () => buildColumnFilter(viewFilter, groupByPropertyId, column.key),
     [viewFilter, groupByPropertyId, column.key],
   );
 
-  const rowsQuery = useBaseRowsQuery(pageId, filter, undefined);
+  const usePortRows = typeof ports?.filterRows === "function";
+  const rowsQuery = useBaseRowsQuery(pageId, filter, undefined, {
+    enabled: !usePortRows && !!pageId,
+  });
   const createCard = useKanbanCreateCardMutation();
 
   const rows = useMemo(() => {
+    if (usePortRows && ports?.filterRows) {
+      return ports
+        .filterRows(pageId, filter)
+        .slice()
+        .sort((a, b) =>
+          a.position < b.position ? -1 : a.position > b.position ? 1 : 0,
+        );
+    }
     const pages = rowsQuery.data?.pages ?? [];
     const seen = new Set<string>();
     const flat: IBaseRow[] = [];
@@ -61,14 +86,18 @@ export function KanbanColumn({
         }
       }
     }
-    return flat.slice().sort((a, b) =>
-      a.position < b.position ? -1 : a.position > b.position ? 1 : 0,
-    );
-  }, [rowsQuery.data]);
+    return flat
+      .slice()
+      .sort((a, b) =>
+        a.position < b.position ? -1 : a.position > b.position ? 1 : 0,
+      );
+  }, [usePortRows, ports, pageId, filter, rowsQuery.data]);
 
-  const count = rowsQuery.isSuccess
-    ? formatKanbanCount(rows.length, rowsQuery.hasNextPage ?? false)
-    : undefined;
+  const count = usePortRows
+    ? formatKanbanCount(rows.length, false)
+    : rowsQuery.isSuccess
+      ? formatKanbanCount(rows.length, rowsQuery.hasNextPage ?? false)
+      : undefined;
 
   useEffect(() => {
     registerColumnRows(column.key, rows);
@@ -94,12 +123,14 @@ export function KanbanColumn({
     return dropTargetForElements({
       element: listEl,
       canDrop: ({ source }) =>
-        source.data.type === KANBAN_CARD_DRAG_TYPE && source.data.pageId === pageId,
+        source.data.type === KANBAN_CARD_DRAG_TYPE &&
+        source.data.pageId === pageId,
       getData: () => ({ columnKey: column.key, isColumnBody: true }),
     });
   }, [column.key, pageId]);
 
   const onScroll = useCallback(() => {
+    if (usePortRows) return;
     const el = listRef.current;
     if (!el) return;
     const { scrollHeight, scrollTop, clientHeight } = el;
@@ -110,7 +141,12 @@ export function KanbanColumn({
     ) {
       rowsQuery.fetchNextPage();
     }
-  }, [rowsQuery.hasNextPage, rowsQuery.isFetchingNextPage, rowsQuery.fetchNextPage]);
+  }, [
+    usePortRows,
+    rowsQuery.hasNextPage,
+    rowsQuery.isFetchingNextPage,
+    rowsQuery.fetchNextPage,
+  ]);
 
   const addCard = useCallback(
     (placement: "top" | "bottom") => {
@@ -119,21 +155,52 @@ export function KanbanColumn({
         position =
           placement === "top"
             ? generateJitteredKeyBetween(null, rows[0]?.position ?? null)
-            : generateJitteredKeyBetween(rows[rows.length - 1]?.position ?? null, null);
+            : generateJitteredKeyBetween(
+                rows[rows.length - 1]?.position ?? null,
+                null,
+              );
       } catch {
         position = undefined;
       }
+
+      const openCreated = (newRow: IBaseRow) => {
+        pendingScrollRef.current = placement;
+        onOpenRow(newRow.id);
+      };
+
+      if (ports?.createKanbanCard) {
+        void ports
+          .createKanbanCard({
+            pageId,
+            groupByPropertyId,
+            columnKey: column.key,
+            position,
+          })
+          .then(openCreated);
+        return;
+      }
+
       createCard.mutate(
-        { pageId, destColumnFilter: filter, groupByPropertyId, columnKey: column.key, position },
         {
-          onSuccess: (newRow) => {
-            pendingScrollRef.current = placement;
-            onOpenRow(newRow.id);
-          },
+          pageId,
+          destColumnFilter: filter,
+          groupByPropertyId,
+          columnKey: column.key,
+          position,
         },
+        { onSuccess: openCreated },
       );
     },
-    [createCard, pageId, filter, groupByPropertyId, column.key, onOpenRow, rows],
+    [
+      ports,
+      createCard,
+      pageId,
+      filter,
+      groupByPropertyId,
+      column.key,
+      onOpenRow,
+      rows,
+    ],
   );
 
   return (
@@ -159,7 +226,12 @@ export function KanbanColumn({
             ref={(el) => registerCardRef(row.id, column.key, el)}
           />
         ))}
-        {canEdit && <KanbanAddCardButton onAddCard={() => addCard("bottom")} />}
+        {canEdit && (
+          <KanbanAddCardButton
+            onAddCard={() => addCard("bottom")}
+            label={ports?.addCardLabel}
+          />
+        )}
       </div>
     </div>
   );

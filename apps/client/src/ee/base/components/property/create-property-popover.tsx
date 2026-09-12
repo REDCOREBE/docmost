@@ -18,6 +18,7 @@ import {
   TypeOptions,
 } from "@/ee/base/types/base.types";
 import { useCreatePropertyMutation } from "@/ee/base/queries/base-property-query";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import { PropertyTypePicker } from "./property-type-picker";
 import { PropertyOptions } from "./property-options";
 import {
@@ -57,6 +58,7 @@ export function CreatePropertyPopover({ pageId, properties, onPropertyCreated, r
   );
 
   const createPropertyMutation = useCreatePropertyMutation();
+  const ports = useBaseDataPorts();
 
   const selectedTypeDef = useMemo(
     () => propertyTypes.find((pt) => pt.type === selectedType),
@@ -150,23 +152,28 @@ export function CreatePropertyPopover({ pageId, properties, onPropertyCreated, r
   const handleCreate = useCallback(() => {
     if (!selectedType || nameTaken) return;
     const finalName = name.trim() || fallbackName;
-    createPropertyMutation.mutate(
-      {
-        pageId,
-        name: finalName,
-        type: selectedType,
-        typeOptions: Object.keys(typeOptions).length > 0
-          ? typeOptions as TypeOptions
-          : undefined,
+    const payload = {
+      pageId,
+      name: finalName,
+      type: selectedType,
+      typeOptions: Object.keys(typeOptions).length > 0
+        ? typeOptions as TypeOptions
+        : undefined,
+    };
+    if (ports?.createProperty) {
+      void ports.createProperty(payload).then((created) => {
+        onPropertyCreated?.(created);
+      });
+      handleClose();
+      return;
+    }
+    createPropertyMutation.mutate(payload, {
+      onSuccess: (created) => {
+        onPropertyCreated?.(created);
       },
-      {
-        onSuccess: (created) => {
-          onPropertyCreated?.(created);
-        },
-      },
-    );
+    });
     handleClose();
-  }, [selectedType, nameTaken, name, fallbackName, typeOptions, pageId, createPropertyMutation, handleClose, onPropertyCreated]);
+  }, [selectedType, nameTaken, name, fallbackName, typeOptions, pageId, createPropertyMutation, handleClose, onPropertyCreated, ports]);
 
   const handleBackToTypePicker = useCallback(() => {
     setPanel("typePicker");

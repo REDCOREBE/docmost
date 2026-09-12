@@ -298,6 +298,44 @@ describe('TaskService ACL and isolation', () => {
       expect(taskItemRepo.insert).toHaveBeenCalled();
     });
 
+    it('create untitled with empty title', async () => {
+      taskItemRepo.insert.mockResolvedValue({ id: taskId, title: '' } as any);
+      taskItemRepo.findByIdWithDetails.mockResolvedValue({
+        id: taskId,
+        title: '',
+        spaceId,
+        linkedPageId: null,
+      } as any);
+      spaceMemberRepo.getUserSpaceIds.mockResolvedValue([spaceId]);
+
+      await expect(
+        service.create(user, workspaceId, { spaceId, title: '' }),
+      ).resolves.toMatchObject({ id: taskId });
+      expect(taskItemRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '' }),
+        expect.anything(),
+      );
+    });
+
+    it('create untitled when title omitted', async () => {
+      taskItemRepo.insert.mockResolvedValue({ id: taskId, title: '' } as any);
+      taskItemRepo.findByIdWithDetails.mockResolvedValue({
+        id: taskId,
+        title: '',
+        spaceId,
+        linkedPageId: null,
+      } as any);
+      spaceMemberRepo.getUserSpaceIds.mockResolvedValue([spaceId]);
+
+      await expect(
+        service.create(user, workspaceId, { spaceId } as any),
+      ).resolves.toMatchObject({ id: taskId });
+      expect(taskItemRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '' }),
+        expect.anything(),
+      );
+    });
+
     it('update ok', async () => {
       taskItemRepo.findById.mockResolvedValue({
         id: taskId,
@@ -317,6 +355,34 @@ describe('TaskService ACL and isolation', () => {
       await expect(
         service.update(user, workspaceId, { taskId, title: 'Updated' }),
       ).resolves.toMatchObject({ id: taskId });
+    });
+
+    it('update title to empty string (untitled)', async () => {
+      taskItemRepo.findById.mockResolvedValue({
+        id: taskId,
+        spaceId,
+        workspaceId,
+        status: 'todo',
+        completedAt: null,
+      } as any);
+      taskItemRepo.update.mockResolvedValue({} as any);
+      taskItemRepo.findByIdWithDetails.mockResolvedValue({
+        id: taskId,
+        title: '',
+        spaceId,
+        linkedPageId: null,
+      } as any);
+      spaceMemberRepo.getUserSpaceIds.mockResolvedValue([spaceId]);
+
+      await expect(
+        service.update(user, workspaceId, { taskId, title: '' }),
+      ).resolves.toMatchObject({ id: taskId });
+      expect(taskItemRepo.update).toHaveBeenCalledWith(
+        taskId,
+        workspaceId,
+        expect.objectContaining({ title: '' }),
+        expect.anything(),
+      );
     });
 
     it('delete 403', async () => {

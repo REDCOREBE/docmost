@@ -32,6 +32,7 @@ import { RowNumberHeaderCell } from "./row-number-header-cell";
 import { BaseDropEdgeIndicator } from "./base-drop-edge-indicator";
 import { useRowSelection } from "@/ee/base/hooks/use-row-selection";
 import { useBaseEditable } from "@/ee/base/context/base-editable";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import classes from "@/ee/base/styles/grid.module.css";
 
 export const COLUMN_DRAG_TYPE = "base-column";
@@ -60,7 +61,9 @@ export const GridHeaderCell = memo(function GridHeaderCell({
   const { selectionCount, toggleAll } = useRowSelection(pageId);
   const hasSelection = selectionCount > 0;
   const editable = useBaseEditable();
-  const isHeaderInteractive = editable && !!property && !isRowNumber;
+  const ports = useBaseDataPorts();
+  const isHeaderInteractive =
+    editable && !!property && !isRowNumber && !ports?.disableSchemaMutations;
   const isRowNumberHeaderInteractive =
     isRowNumber && editable && loadedRowIds.length > 0;
 

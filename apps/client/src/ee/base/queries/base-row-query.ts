@@ -34,6 +34,7 @@ import { useTranslation } from "react-i18next";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useHydrateReferences } from "@/ee/base/reference/reference-store";
 import { markRequestIdOutbound } from "@/ee/base/hooks/use-base-socket";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import { v7 as uuid7 } from "uuid";
 
 type RowCacheContext = {
@@ -85,6 +86,7 @@ export function useBaseRowsQuery(
   pageId: string | undefined,
   filter?: FilterNode,
   sorts?: ViewSortConfig[],
+  options?: { enabled?: boolean },
 ) {
   const activeFilter = normalizeFilter(filter);
   const activeSorts = sorts?.length ? sorts : undefined;
@@ -98,7 +100,7 @@ export function useBaseRowsQuery(
         filter: activeFilter,
         sorts: activeSorts,
       }),
-    enabled: !!pageId,
+    enabled: !!pageId && (options?.enabled ?? true),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: IBaseRowsPage) =>
       lastPage.meta?.nextCursor ?? undefined,
@@ -170,9 +172,17 @@ export function useBaseRowQuery(
   rowId: string | undefined,
   options?: { enabled?: boolean },
 ) {
+  const ports = useBaseDataPorts();
   return useQuery<IBaseRow, Error>({
     queryKey: ["base-row", pageId, rowId],
-    queryFn: () => getRowInfo(rowId!, pageId!),
+    queryFn: async () => {
+      if (ports?.getRow) {
+        const row = await ports.getRow(pageId!, rowId!);
+        if (!row) throw new Error("Row not found");
+        return row;
+      }
+      return getRowInfo(rowId!, pageId!);
+    },
     enabled: !!pageId && !!rowId && (options?.enabled ?? true),
     retry: false,
   });
@@ -180,9 +190,33 @@ export function useBaseRowQuery(
 
 export function useUpdateRowMutation() {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
   return useMutation<IBaseRow, Error, UpdateRowInput, RowCacheContext>({
-    mutationFn: (data) => updateRow({ ...data, requestId: newRequestId() }),
+    mutationFn: async (data) => {
+      if (ports?.updateRowCells) {
+        await ports.updateRowCells({
+          pageId: data.pageId,
+          rowId: data.rowId,
+          cells: data.cells,
+        });
+        return {
+          id: data.rowId,
+          pageId: data.pageId,
+          cells: data.cells,
+          position: data.position ?? "a0",
+          creatorId: "",
+          lastUpdatedById: null,
+          workspaceId: "",
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return updateRow({ ...data, requestId: newRequestId() });
+    },
     onMutate: async (variables) => {
+      if (ports?.updateRowCells) {
+        return { snapshots: [] };
+      }
       await queryClient.cancelQueries({
         queryKey: ["base-rows", variables.pageId],
       });
@@ -226,6 +260,13 @@ export function useUpdateRowMutation() {
       return { snapshots };
     },
     onError: (error, variables, context) => {
+      if (ports?.updateRowCells) {
+        notifications.show({
+          message: getApiErrorMessage(error, t("Failed to update row")),
+          color: "red",
+        });
+        return;
+      }
       if (context?.snapshots) {
         for (const [key, data] of context.snapshots) {
           queryClient.setQueryData(key, data);
@@ -240,6 +281,7 @@ export function useUpdateRowMutation() {
       });
     },
     onSuccess: (updatedRow, variables) => {
+      if (ports?.updateRowCells) return;
       queryClient.setQueriesData<InfiniteData<IBaseRowsPage>>(
         { queryKey: ["base-rows", updatedRow.pageId] },
         (old) => {
@@ -282,9 +324,19 @@ export function useUpdateRowMutation() {
 
 export function useDeleteRowMutation() {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
   return useMutation<void, Error, DeleteRowInput, RowCacheContext>({
-    mutationFn: (data) => deleteRow({ ...data, requestId: newRequestId() }),
+    mutationFn: async (data) => {
+      if (ports?.deleteRow) {
+        await ports.deleteRow({ pageId: data.pageId, rowId: data.rowId });
+        return;
+      }
+      return deleteRow({ ...data, requestId: newRequestId() });
+    },
     onMutate: async (variables) => {
+      if (ports?.deleteRow) {
+        return { snapshots: [] };
+      }
       await queryClient.cancelQueries({
         queryKey: ["base-rows", variables.pageId],
       });
