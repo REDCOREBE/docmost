@@ -20,10 +20,12 @@ export function TasksTable({
   tasks,
   showSpace,
   onOpen,
+  canWriteTask,
 }: {
   tasks: TaskItem[];
   showSpace: boolean;
   onOpen: (task: TaskItem) => void;
+  canWriteTask?: (task: TaskItem) => boolean;
 }) {
   const { t } = useTranslation();
   const statusLabel: Record<TaskStatus, string> = {
@@ -51,11 +53,19 @@ export function TasksTable({
           {tasks.map((task) => (
             <Table.Tr key={task.id}>
               <Table.Td>
-                <UnstyledButton onClick={() => onOpen(task)}>
+                {canWriteTask && !canWriteTask(task) ? (
                   <Text fw={500} size="sm">
-                    {task.title} <TasksLinkedPageIcon linkedPage={task.linkedPage} />
+                    {task.title}{" "}
+                    <TasksLinkedPageIcon linkedPage={task.linkedPage} />
                   </Text>
-                </UnstyledButton>
+                ) : (
+                  <UnstyledButton onClick={() => onOpen(task)}>
+                    <Text fw={500} size="sm">
+                      {task.title}{" "}
+                      <TasksLinkedPageIcon linkedPage={task.linkedPage} />
+                    </Text>
+                  </UnstyledButton>
+                )}
               </Table.Td>
               <Table.Td>
                 <Badge color={statusColor[task.status]} variant="light">

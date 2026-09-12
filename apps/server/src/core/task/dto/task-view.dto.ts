@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsIn,
   IsNotEmpty,
   IsObject,
@@ -7,7 +8,6 @@ import {
   IsUUID,
   MaxLength,
   MinLength,
-  ValidateIf,
 } from 'class-validator';
 
 export class ListTaskViewsDto {
@@ -44,6 +44,7 @@ export class CreateTaskViewDto {
    * Shared global (spaceId null + shared) is forbidden in V1.
    */
   @IsOptional()
+  @IsBoolean()
   shared?: boolean;
 }
 

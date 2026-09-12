@@ -37,6 +37,8 @@ import {
   SpaceCaslAction,
   SpaceCaslSubject,
 } from "@/features/space/permissions/permissions.type";
+import { ISpace } from "@/features/space/types/space.types";
+import { SpaceRole } from "@/lib/types";
 
 type TasksPageProps = {
   spaceId?: string;
@@ -44,6 +46,10 @@ type TasksPageProps = {
   title?: string;
   defaultAssignee?: "me";
 };
+
+function isWritableSpaceRole(role?: SpaceRole | string | null): boolean {
+  return role === SpaceRole.ADMIN || role === SpaceRole.WRITER;
+}
 
 export function TasksPageContent({
   spaceId,
@@ -76,20 +82,38 @@ export function TasksPageContent({
   const { data: spacesData } = useGetSpacesQuery({ limit: 100 });
 
   const tasks = data?.pages.flatMap((p) => p.items) ?? [];
-  const spaceOptions =
-    spacesData?.items?.map((s: any) => ({
-      value: s.id,
-      label: s.name,
-    })) ?? [];
+  const writableSpaces = useMemo(
+    () =>
+      ((spacesData?.items ?? []) as ISpace[]).filter((s) =>
+        isWritableSpaceRole(s.membership?.role),
+      ),
+    [spacesData],
+  );
+  const spaceOptions = writableSpaces.map((s) => ({
+    value: s.id,
+    label: s.name,
+  }));
+  const writableSpaceIds = useMemo(
+    () => new Set(writableSpaces.map((s) => s.id)),
+    [writableSpaces],
+  );
 
   const ability = useSpaceAbility(spacePermissions);
-  const canCreate = spaceId
+  const canEditInSpace = spaceId
     ? ability.can(SpaceCaslAction.Edit, SpaceCaslSubject.Page) ||
       ability.can(SpaceCaslAction.Manage, SpaceCaslSubject.Page)
-    : true;
+    : false;
+  // Global /tasks: create only when at least one Writer/Admin space exists;
+  // space picker in the modal is the required next step (API remains authority).
+  const canCreate = spaceId ? canEditInSpace : writableSpaces.length > 0;
   const canManageShared = spaceId
     ? ability.can(SpaceCaslAction.Manage, SpaceCaslSubject.Settings)
     : false;
+
+  const canWriteTask = (task: TaskItem) => {
+    if (spaceId) return canEditInSpace;
+    return writableSpaceIds.has(task.spaceId);
+  };
 
   async function handleSubmit(values: TaskEditorValues) {
     if (editing) {
@@ -177,7 +201,9 @@ export function TasksPageContent({
           <TasksTable
             tasks={tasks}
             showSpace={!spaceId}
+            canWriteTask={canWriteTask}
             onOpen={(task) => {
+              if (!canWriteTask(task)) return;
               setEditing(task);
               setEditorOpen(true);
             }}
@@ -185,11 +211,15 @@ export function TasksPageContent({
         ) : (
           <TasksKanban
             tasks={tasks}
+            canWriteTask={canWriteTask}
             onOpen={(task) => {
+              if (!canWriteTask(task)) return;
               setEditing(task);
               setEditorOpen(true);
             }}
             onStatusChange={(taskId, nextStatus) => {
+              const task = tasks.find((item) => item.id === taskId);
+              if (!task || !canWriteTask(task)) return;
               updateMutation.mutate({ taskId, status: nextStatus });
             }}
           />

@@ -17,16 +17,18 @@ import classes from "../styles/tasks.module.css";
 export function TasksKanbanCard({
   task,
   onOpen,
+  canWrite = true,
 }: {
   task: TaskItem;
   onOpen: (task: TaskItem) => void;
+  canWrite?: boolean;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || !canWrite) return;
     return draggable({
       element: el,
       getInitialData: () => ({
@@ -37,13 +39,17 @@ export function TasksKanbanCard({
       onDragStart: () => setDragging(true),
       onDrop: () => setDragging(false),
     });
-  }, [task.id, task.status]);
+  }, [task.id, task.status, canWrite]);
 
   return (
     <UnstyledButton
       ref={ref}
       className={`${classes.card} ${dragging ? classes.cardDragging : ""}`}
-      onClick={() => onOpen(task)}
+      onClick={() => {
+        if (!canWrite) return;
+        onOpen(task);
+      }}
+      style={canWrite ? undefined : { cursor: "default" }}
     >
       <Group justify="space-between" mb={6} wrap="nowrap">
         <Text size="sm" fw={600} lineClamp={2}>
@@ -69,12 +75,14 @@ export function TasksKanbanColumn({
   tasks,
   onOpen,
   onDropTask,
+  canWriteTask,
 }: {
   status: TaskStatus;
   title: string;
   tasks: TaskItem[];
   onOpen: (task: TaskItem) => void;
   onDropTask: (taskId: string, status: TaskStatus) => void;
+  canWriteTask?: (task: TaskItem) => boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [isOver, setIsOver] = useState(false);
@@ -111,7 +119,12 @@ export function TasksKanbanColumn({
       </div>
       <div className={classes.columnBody}>
         {tasks.map((task) => (
-          <TasksKanbanCard key={task.id} task={task} onOpen={onOpen} />
+          <TasksKanbanCard
+            key={task.id}
+            task={task}
+            onOpen={onOpen}
+            canWrite={canWriteTask ? canWriteTask(task) : true}
+          />
         ))}
       </div>
     </div>
@@ -122,10 +135,12 @@ export function TasksKanban({
   tasks,
   onOpen,
   onStatusChange,
+  canWriteTask,
 }: {
   tasks: TaskItem[];
   onOpen: (task: TaskItem) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
+  canWriteTask?: (task: TaskItem) => boolean;
 }) {
   const { t } = useTranslation();
   const columns: { status: TaskStatus; title: string }[] = [
@@ -144,6 +159,7 @@ export function TasksKanban({
           tasks={tasks.filter((task) => task.status === col.status)}
           onOpen={onOpen}
           onDropTask={onStatusChange}
+          canWriteTask={canWriteTask}
         />
       ))}
     </div>
