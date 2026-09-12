@@ -1,40 +1,65 @@
 # Rollback
 
-Restore Docmost vanilla Tasks-free behaviour (data on `pages` / `spaces` / `users` / `base_*` untouched).
+Guaranteed rollback **before merge** of `feature/tasks-native-v1`:
 
-## Application rollback
+```bash
+git switch <branche_initiale>   # e.g. redcore/0.95.0
+git branch -D feature/tasks-native-v1
+```
 
-1. Remove nav entries and routes (`global-sidebar`, `space-sidebar`, `App.tsx`, `app-route.ts`, locale keys).
+Baseline tag (do not move):
+
+```text
+pre-tasks-native-v1
+```
+
+Diff from baseline:
+
+```bash
+git diff pre-tasks-native-v1..feature/tasks-native-v1 --stat
+```
+
+## Application rollback (post-deploy / post-merge)
+
+1. Remove nav + routes (`App.tsx`, `app-route.ts`, global-sidebar, space-sidebar, locale keys).
 2. Remove `TaskModule` from `core.module.ts`.
-3. Remove Task repos from `database.module.ts`.
-4. Remove Task aliases from `entity.types.ts`; regenerate or strip Task interfaces from `db.d.ts`.
-5. Drop tables (dev only, after backup):
+3. Remove task repos from `DatabaseModule`.
+4. Remove Task aliases/types from `entity.types.ts` and `db.d.ts` (or re-codegen after dropping tables).
+5. Drop tables (dev/staging only unless explicitly approved):
 
 ```sql
 DROP TABLE IF EXISTS task_views;
 DROP TABLE IF EXISTS task_assignees;
 DROP TABLE IF EXISTS task_items;
+DELETE FROM kysely_migration WHERE name = '20260912T074500-tasks';
 ```
 
-6. Optionally reverse migration: `pnpm --filter ./apps/server migration:down` once.
-
-## Git rollback (before merge)
+Or migration down:
 
 ```bash
-git switch redcore/0.95.0   # or prior branch
-git branch -D feature/tasks-native-v1
-# restore point: tag pre-tasks-native-v1
+pnpm --filter ./apps/server migration:down
 ```
 
-## DB restore (human-only)
+## Confirmed intact after Tasks work
 
-Use the pre-migration dump (never auto-restore):
+- `pages`
+- `spaces`
+- `users`
+- `base_*`
+
+Space hard-delete remains CASCADE via FK — no `SpaceService` change.
+
+## DB backup (this environment)
+
+Created before migration:
+
+- Path: `/root/backups/docmost-pre-tasks-20260912-074455.dump`
+- Format: `pg_dump -Fc`
+- Target (non-secret): host=`db` (compose), port=`5432`, database=`docmost`, user=`docmost`
+- Restore requires **explicit human approval** — never auto-restore.
 
 ```bash
-# example — validate path/size first
-pg_restore -l /root/backups/docmost-pre-tasks-YYYYMMDD-HHMMSS.dump
+# verify listing
+docker cp /root/backups/docmost-pre-tasks-20260912-074455.dump docmost-db-1:/tmp/docmost-pre-tasks.dump
+docker exec docmost-db-1 pg_restore -l /tmp/docmost-pre-tasks.dump | wc -l
 ```
-
-## Guarantee
-
-Removing Tasks does not require altering Docmost core tables beyond dropping additive `task_*` tables and reversing the listed upstream hunks.
