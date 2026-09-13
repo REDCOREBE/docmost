@@ -1,5 +1,9 @@
 # Native Tasks (Redcore fork)
 
+## Gantt (Project A)
+
+Production Gantt baseline **R24**: see [../gantt/README.md](../gantt/README.md) (`docmost-r24-gantt-ux-prod`).
+
 Independent Tasks **data plane** for Docmost v0.95.0 — parallel to Bases (`task_*` only). Client UI reuses EE Base **presentation** via a Tasks adapter + generic `BaseDataPorts` (see [LICENCE.md](./LICENCE.md)).
 
 ## Scope
