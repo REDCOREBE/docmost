@@ -61,16 +61,21 @@ None of these warnings required rollback.
 
 ## R26 — Gantt Edit Rebased (candidate validation)
 
-**NOT A PROD CUTOVER.** Isolated smoke only.
+**NOT A PROD CUTOVER.** Isolated smoke only. Prod remains Louise R25 + Gantt R24.
 
 | Field | Value |
 |-------|-------|
-| RESULT | see closing report in chat |
+| RESULT | **VALIDATED WITH GAPS** |
+| SAFE FOR PROD | **no** (browser drag matrix not run; host `:3012` docker-proxy hung) |
 | Base | `2cb717a5` / `docmost-r24-gantt-ux-prod` |
-| Branch | `feature/tasks-r23-gantt-edit-rebased` |
-| Unit tests | `gantt-edit.spec.ts` + R24 suites — 41 passed |
+| Branch | `feature/tasks-r23-gantt-edit-rebased` @ `de5951c5` |
+| Feature commit | `4a5d8484` |
+| Unit tests | 41 passed (`gantt-edit` + R24 suites) |
 | Image | `redcore-docmost-c2:0.95.0-r26-gantt-edit-rebased-test` |
-| Limitations | No keyboard date nudge (V1.2). No edge auto-scroll. Headless SSO not used for full UI matrix; unit + isolated smoke. |
+| Digest | `sha256:290f6611d9ab0d68b902853ff49e4e5e157cd2d165536366ef21eb8215d6f258` |
+| Integrate layer | unpublished `/tmp/docmost-r26-integrate` = Gantt `4a5d8484` + Louise client `a527bd32` (not pushed) |
+| Smoke | compose project `docmost-tasks-r26-gantt-edit-smoke`, nsenter `http://127.0.0.1:3000` → `/` `/tasks` `/ai/chat` **200**; Louise patch applied; RestartCount=0 |
+| Rollback if ever cut over | combined prod `redcore-docmost-c2:0.95.0-r25-louise-context-usage-final` — **not** Gantt-only R24 |
 
-R24 regression expected to remain: quick filters, dirty=false, card properties, auto-dates, EPMF, Table/Kanban. Drag must use `effectivePxPerDay`.
+Limitations: no keyboard date nudge (V1.2); no edge auto-scroll; no logged-in pointer gestures in this run.
 
