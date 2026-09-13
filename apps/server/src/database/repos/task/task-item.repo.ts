@@ -225,4 +225,27 @@ export class TaskItemRepo {
         .whereRef('spaces.id', '=', 'taskItems.spaceId'),
     ).as('space');
   }
+
+  /**
+   * ACL-safe count: assignee=me AND status!=done across accessible spaces.
+   * DISTINCT guards against duplicate assignee rows.
+   */
+  async countMineOpen(userId: string, workspaceId: string): Promise<number> {
+    const row = await this.db
+      .selectFrom('taskItems')
+      .innerJoin('taskAssignees', 'taskAssignees.taskId', 'taskItems.id')
+      .select((eb) =>
+        eb.fn.count<number>('taskItems.id').distinct().as('count'),
+      )
+      .where('taskItems.workspaceId', '=', workspaceId)
+      .where('taskAssignees.userId', '=', userId)
+      .where('taskItems.status', '!=', 'done')
+      .where(
+        'taskItems.spaceId',
+        'in',
+        this.spaceMemberRepo.getUserSpaceIdsQuery(userId),
+      )
+      .executeTakeFirst();
+    return Number(row?.count ?? 0);
+  }
 }

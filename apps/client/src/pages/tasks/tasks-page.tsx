@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Container, Text, Title } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 import { notifications } from "@mantine/notifications";
@@ -11,10 +11,7 @@ import {
   useUpdateTaskMutation,
 } from "@/features/tasks/queries/task-query";
 import { TasksNativeShell } from "@/features/tasks/components/native/tasks-native-shell";
-import {
-  TaskScopeFilter,
-  TaskStatus,
-} from "@/features/tasks/types/task.types";
+import { TaskStatus } from "@/features/tasks/types/task.types";
 import {
   buildTasksBase,
   mapTaskToBaseRow,
@@ -46,24 +43,49 @@ export function TasksPageContent({
 }: TasksPageProps & { spacePermissions?: any }) {
   const { t } = useTranslation();
   const { data: currentUser } = useCurrentUser();
-  const [scope, setScope] = useState<TaskScopeFilter>("all");
   const [openRowId, setOpenRowId] = useState<string | null>(null);
 
-  const listParams = useMemo(() => {
-    const isGlobal = !spaceId;
-    return {
+  // Legacy assignee/due query filters removed from chrome (V2.1 ViewTabs).
+  // List remains unscoped; view.config.filter applies client-side.
+  const listParams = useMemo(
+    () => ({
       spaceId: spaceId ?? undefined,
-      assignee: isGlobal && scope === "mine" ? ("me" as const) : undefined,
-      due: isGlobal && scope === "overdue" ? ("overdue" as const) : undefined,
       limit: 100,
-    };
-  }, [spaceId, scope]);
+    }),
+    [spaceId],
+  );
 
-  const { data, isLoading, isError } = useTasksQuery(listParams);
+  const {
+    data,
+    isLoading,
+    isError,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useTasksQuery(listParams);
+
+  // Exhaust pages so Table/Kanban/Gantt share the full filtered set (Gantt cannot
+  // virtualize rows that were never fetched).
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
   const createMutation = useCreateTaskMutation();
   const updateMutation = useUpdateTaskMutation();
   const { data: spacesData } = useGetSpacesQuery({ limit: 100 });
-  const { data: spaceProperties } = useTaskPropertiesQuery(spaceId);
+  // Global: resolve properties from the open task's space so create/edit stay visible.
+  const openTaskSpaceId = useMemo(() => {
+    if (spaceId) return spaceId;
+    if (!openRowId) return undefined;
+    const task = (data?.pages.flatMap((p) => p.items) ?? []).find(
+      (t) => t.id === openRowId,
+    );
+    return task?.spaceId;
+  }, [spaceId, openRowId, data]);
+  const { data: spaceProperties } = useTaskPropertiesQuery(
+    spaceId ?? openTaskSpaceId,
+  );
   const { data: views } = useTaskViewsQuery(spaceId);
 
   const tasks = data?.pages.flatMap((p) => p.items) ?? [];
@@ -190,22 +212,23 @@ export function TasksPageContent({
       <Title order={3} mb="xs">
         {title ?? t("Tasks")}
       </Title>
-      <TasksNativeShell
-        base={base}
-        rows={rows}
-        customProperties={customProperties}
-        isGlobal={!spaceId}
-        scope={scope}
-        canCreate={canCreate}
-        canManageProperties={canManageProperties}
-        propertySpaceId={spaceId}
-        createSpaceId={spaceId ?? writableSpaces[0]?.id}
-        onCreate={handleCreate}
-        onStatusChange={handleStatusChange}
-        onScopeChange={setScope}
-        openRowId={openRowId}
-        onOpenRow={setOpenRowId}
-      />
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <TasksNativeShell
+          base={base}
+          rows={rows}
+          tasks={tasks}
+          customProperties={customProperties}
+          isGlobal={!spaceId}
+          canCreate={canCreate}
+          canManageProperties={canManageProperties}
+          propertySpaceId={spaceId}
+          createSpaceId={spaceId ?? writableSpaces[0]?.id}
+          onCreate={handleCreate}
+          onStatusChange={handleStatusChange}
+          openRowId={openRowId}
+          onOpenRow={setOpenRowId}
+        />
+      </div>
     </Container>
   );
 }

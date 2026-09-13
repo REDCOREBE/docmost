@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   HttpCode,
@@ -29,6 +30,7 @@ import {
   TaskPropertyIdDto,
   UpdateTaskPropertyDto,
 } from './dto/task-property.dto';
+import { CountTasksDto } from './dto/count-tasks.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
@@ -44,6 +46,20 @@ export class TaskController {
     @AuthWorkspace() workspace: Workspace,
   ) {
     return this.taskService.list(user, workspace.id, dto, pagination);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('count')
+  async count(
+    @Body() dto: CountTasksDto,
+    @AuthUser() user: User,
+    @AuthWorkspace() workspace: Workspace,
+  ) {
+    const scope = dto.scope ?? 'mine-open';
+    if (scope !== 'mine-open') {
+      throw new BadRequestException(`Unsupported count scope: ${scope}`);
+    }
+    return this.taskService.countMineOpen(user, workspace.id);
   }
 
   @HttpCode(HttpStatus.OK)

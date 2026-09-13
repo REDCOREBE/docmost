@@ -1,0 +1,5 @@
+/** Clamp display to 0–100; numeric cell value remains canonical. */
+export function clampProgressPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}

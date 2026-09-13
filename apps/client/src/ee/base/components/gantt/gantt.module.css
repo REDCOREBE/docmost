@@ -1,0 +1,339 @@
+.root {
+  --gantt-row-h: 34px;
+  --gantt-bar-h: 22px;
+  --gantt-grid-line: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-2) 75%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-5) 60%, transparent)
+  );
+  --gantt-vert-line: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-2) 55%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-5) 40%, transparent)
+  );
+
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  height: 100%;
+  border: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  border-radius: var(--mantine-radius-sm);
+  background: light-dark(var(--mantine-color-body), var(--mantine-color-dark-7));
+  overflow: hidden;
+}
+
+.metaBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  flex-shrink: 0;
+  min-height: 28px;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+.inner {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-shrink: 0;
+  background: light-dark(var(--mantine-color-body), var(--mantine-color-dark-7));
+  box-shadow: 0 1px 0 light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+}
+
+.monthRow,
+.dayRow {
+  display: flex;
+  flex-direction: row;
+  position: relative;
+}
+
+.monthCell {
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-gray-3));
+  border-right: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dayCell {
+  box-sizing: border-box;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 450;
+  line-height: 1;
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-1));
+  border-right: 1px solid var(--gantt-vert-line);
+}
+
+.dayWeekend {
+  background: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-1) 50%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-6) 40%, transparent)
+  );
+  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-2));
+}
+
+.dayToday {
+  color: light-dark(var(--mantine-color-red-7), var(--mantine-color-red-4));
+  font-weight: 700;
+}
+
+.body {
+  position: relative;
+  flex: 1 0 auto;
+  min-height: var(--gantt-body-min, 0px);
+  /* Horizontal row lines + subtle vertical day ticks fill empty space */
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--gantt-row-h) - 1px),
+      var(--gantt-grid-line) calc(var(--gantt-row-h) - 1px),
+      var(--gantt-grid-line) var(--gantt-row-h)
+    ),
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(var(--gantt-day-w, 26px) - 1px),
+      var(--gantt-vert-line) calc(var(--gantt-day-w, 26px) - 1px),
+      var(--gantt-vert-line) var(--gantt-day-w, 26px)
+    );
+  background-attachment: local;
+}
+
+.row {
+  position: relative;
+  height: var(--gantt-row-h);
+  /* Row border handled by body grid so empty space matches */
+  border-bottom: none;
+}
+
+.weekendCol {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-1) 38%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-6) 28%, transparent)
+  );
+  pointer-events: none;
+}
+
+.todayLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: light-dark(var(--mantine-color-red-6), var(--mantine-color-red-5));
+  opacity: 0.72;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.todayBadge {
+  position: absolute;
+  top: 3px;
+  transform: translateX(-50%);
+  z-index: 6;
+  pointer-events: none;
+  font-size: 9px !important;
+  height: 14px !important;
+  padding-inline: 5px !important;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600 !important;
+}
+
+.bar {
+  position: absolute;
+  top: calc((var(--gantt-row-h) - var(--gantt-bar-h)) / 2);
+  height: var(--gantt-bar-h);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid light-dark(
+    color-mix(in srgb, currentColor 10%, transparent),
+    color-mix(in srgb, currentColor 16%, transparent)
+  );
+  min-width: 6px;
+  z-index: 2;
+  background-clip: padding-box;
+  transition: box-shadow 80ms ease, filter 80ms ease;
+}
+
+.bar:hover {
+  filter: brightness(0.97);
+  box-shadow: 0 0 0 1px light-dark(var(--mantine-color-blue-3), var(--mantine-color-blue-7));
+}
+
+.bar:focus-visible {
+  outline: 2px solid light-dark(var(--mantine-color-blue-5), var(--mantine-color-blue-4));
+  outline-offset: 1px;
+}
+
+.barProgress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  opacity: 0.2;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.barLabel {
+  position: relative;
+  z-index: 1;
+  font-size: 11.5px;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
+  line-height: 1.1;
+}
+
+.barMeta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+}
+
+.barMetaItem {
+  font-size: 10.5px;
+  font-weight: 450;
+  opacity: 0.78;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 9em;
+  line-height: 1.1;
+}
+
+.barMetaSep {
+  opacity: 0.35;
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.milestoneWrap {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.milestone {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid light-dark(
+    color-mix(in srgb, currentColor 18%, transparent),
+    color-mix(in srgb, currentColor 24%, transparent)
+  );
+  border-radius: 2px;
+  transform: rotate(45deg);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: box-shadow 80ms ease, filter 80ms ease;
+}
+
+.milestone:hover {
+  filter: brightness(0.97);
+  box-shadow: 0 0 0 1px light-dark(var(--mantine-color-blue-3), var(--mantine-color-blue-7));
+}
+
+.milestone:focus-visible {
+  outline: 2px solid light-dark(var(--mantine-color-blue-5), var(--mantine-color-blue-4));
+  outline-offset: 2px;
+}
+
+.milestoneLabel {
+  font-size: 11px;
+  font-weight: 550;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-gray-3));
+  pointer-events: none;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  max-width: 420px;
+}
+
+.clampedHint {
+  font-size: 11px;
+  color: light-dark(var(--mantine-color-dimmed), var(--mantine-color-dark-1));
+}
+
+@media (max-width: 640px) {
+  .bar {
+    padding: 0 6px;
+    gap: 4px;
+  }
+
+  .barMeta {
+    max-width: 42%;
+  }
+
+  .milestoneLabel {
+    max-width: 96px;
+  }
+}

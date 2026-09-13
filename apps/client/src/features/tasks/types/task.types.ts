@@ -1,6 +1,6 @@
 export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "none" | "low" | "medium" | "high" | "urgent";
-export type TaskViewType = "table" | "kanban";
+export type TaskViewType = "table" | "kanban" | "gantt";
 export type TaskDueFilter = "overdue" | "today" | "upcoming";
 /** Global /tasks scope tabs (not table|kanban). */
 export type TaskScopeFilter = "all" | "mine" | "overdue";
@@ -75,6 +75,7 @@ export interface TaskItem {
   status: TaskStatus;
   priority: TaskPriority;
   progress: number;
+  startDate?: string | null;
   dueDate?: string | null;
   createdById?: string | null;
   createdAt: string;

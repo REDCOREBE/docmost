@@ -36,6 +36,14 @@ import {
   UpdateTaskPropertyDto,
 } from './dto/task-property.dto';
 import { generateJitteredKeyBetween } from 'fractional-indexing-jittered';
+import { mergeViewConfig } from './utils/merge-view-config';
+import {
+  TASK_VIEW_SYSTEM_KEY,
+  buildAllFilterConfig,
+  buildMineFilterConfig,
+  buildOverdueFilterConfig,
+  buildSpaceAllKanbanConfig,
+} from './utils/task-view-seeds';
 
 @Injectable()
 export class TaskService {
@@ -136,6 +144,7 @@ export class TaskService {
           status,
           priority: dto.priority ?? 'none',
           progress: dto.progress ?? 0,
+          startDate: dto.startDate ? new Date(dto.startDate) : null,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
           createdById: user.id,
           completedAt: status === 'done' ? new Date() : null,
@@ -202,6 +211,9 @@ export class TaskService {
       if (dto.status !== undefined) patch.status = dto.status;
       if (dto.priority !== undefined) patch.priority = dto.priority;
       if (dto.progress !== undefined) patch.progress = dto.progress;
+      if (dto.startDate !== undefined) {
+        patch.startDate = dto.startDate ? new Date(dto.startDate) : null;
+      }
       if (dto.dueDate !== undefined) {
         patch.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
       }
@@ -252,10 +264,97 @@ export class TaskService {
       }
     }
 
-    return this.taskViewRepo.list(workspaceId, {
-      spaceId: spaceId ?? null,
-      userId: user.id,
+    const scope = { spaceId: spaceId ?? null, userId: user.id };
+    let views = await this.taskViewRepo.list(workspaceId, scope);
+    views = await this.ensureDefaultViews(user, workspaceId, spaceId ?? null, views);
+    return views;
+  }
+
+  /**
+   * Lazy idempotent seeds. Only when the scoped list is empty.
+   * Space → shared "Tout". Global → personal Tout / Mes tâches / En retard.
+   *
+   * Concurrency: pg_advisory_xact_lock inside a transaction so parallel
+   * empty-scope listViews cannot double-insert.
+   */
+  private async ensureDefaultViews(
+    user: User,
+    workspaceId: string,
+    spaceId: string | null,
+    existing: Awaited<ReturnType<TaskViewRepo['list']>>,
+  ) {
+    if (existing.length > 0) {
+      return existing;
+    }
+
+    const scope = { spaceId, userId: user.id };
+
+    return executeTx(this.db, async (trx) => {
+      await this.taskViewRepo.acquireSeedLock(workspaceId, scope, trx);
+
+      const locked = await this.taskViewRepo.list(workspaceId, scope, trx);
+      if (locked.length > 0) {
+        return locked;
+      }
+
+      if (spaceId) {
+        await this.taskViewRepo.insert(
+          {
+            workspaceId,
+            spaceId,
+            ownerUserId: null,
+            name: 'Tout',
+            type: 'kanban',
+            config: buildSpaceAllKanbanConfig() as any,
+            position: 'a0',
+          },
+          trx,
+        );
+      } else {
+        const seeds: Array<{
+          name: string;
+          position: string;
+          config: Record<string, unknown>;
+        }> = [
+          {
+            name: 'Tout',
+            position: 'a0',
+            config: buildAllFilterConfig(TASK_VIEW_SYSTEM_KEY.globalAll),
+          },
+          {
+            name: 'Mes tâches',
+            position: 'a1',
+            config: buildMineFilterConfig(user.id),
+          },
+          {
+            name: 'En retard',
+            position: 'a2',
+            config: buildOverdueFilterConfig(),
+          },
+        ];
+        for (const seed of seeds) {
+          await this.taskViewRepo.insert(
+            {
+              workspaceId,
+              spaceId: null,
+              ownerUserId: user.id,
+              name: seed.name,
+              type: 'table',
+              config: seed.config as any,
+              position: seed.position,
+            },
+            trx,
+          );
+        }
+      }
+
+      return this.taskViewRepo.list(workspaceId, scope, trx);
     });
+  }
+
+  async countMineOpen(user: User, workspaceId: string) {
+    const count = await this.taskItemRepo.countMineOpen(user.id, workspaceId);
+    return { count, scope: 'mine-open' as const };
   }
 
   async createView(user: User, workspaceId: string, dto: CreateTaskViewDto) {
@@ -303,7 +402,13 @@ export class TaskService {
     const patch: Record<string, unknown> = {};
     if (dto.name !== undefined) patch.name = dto.name.trim();
     if (dto.type !== undefined) patch.type = dto.type;
-    if (dto.config !== undefined) patch.config = dto.config;
+    if (dto.config !== undefined) {
+      // Shallow per-key merge — never replace the whole config blob with a partial patch.
+      patch.config = mergeViewConfig(
+        (view.config ?? {}) as Record<string, unknown>,
+        dto.config as Record<string, unknown>,
+      );
+    }
     if (dto.position !== undefined) patch.position = dto.position;
 
     return this.taskViewRepo.update(dto.viewId, workspaceId, patch as any);

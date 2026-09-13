@@ -7,6 +7,7 @@ import {
 } from "@/ee/base/types/base.types";
 import { BaseTable } from "@/ee/base/components/base-table";
 import { BaseKanban } from "@/ee/base/components/kanban/base-kanban";
+import { BaseGantt } from "@/ee/base/components/gantt/base-gantt";
 
 type ViewRendererProps = {
   base: IBase;
@@ -45,6 +46,19 @@ export function ViewRenderer(props: ViewRendererProps) {
         view={props.effectiveView!}
         pageId={props.pageId}
         embedded={props.embedded}
+        editable={props.editable}
+        viewFilter={props.kanbanFilter}
+      />
+    );
+  }
+
+  if (viewType === "gantt" && props.effectiveView) {
+    return (
+      <BaseGantt
+        base={props.base}
+        view={props.effectiveView}
+        rows={props.rows}
+        pageId={props.pageId}
         editable={props.editable}
         viewFilter={props.kanbanFilter}
       />

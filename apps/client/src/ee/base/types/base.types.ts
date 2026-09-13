@@ -25,7 +25,7 @@ export type BasePropertyType =
   | 'formula'
   | 'longText';
 
-export type BaseViewType = 'table' | 'kanban' | 'calendar';
+export type BaseViewType = 'table' | 'kanban' | 'calendar' | 'gantt';
 
 export type Choice = {
   id: string;
@@ -214,6 +214,20 @@ export type ViewConfig = {
   groupByPropertyId?: string;
   hiddenChoiceIds?: string[];
   choiceOrder?: string[];
+  // Gantt V1
+  gantt?: GanttViewConfig;
+};
+
+export type GanttZoom = 'day' | 'week' | 'month';
+
+export type GanttViewConfig = {
+  startPropertyId: string;
+  endPropertyId: string;
+  zoom?: GanttZoom;
+  showToday?: boolean;
+  showWeekends?: boolean;
+  /** Secondary property ids rendered inside Gantt bars (title always shown). */
+  barPropertyIds?: string[];
 };
 
 export type ViewConfigPatch = {

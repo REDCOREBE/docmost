@@ -22,6 +22,7 @@ import {
   formatTimestamp,
   formatLongTextPreview,
 } from "@/ee/base/formatters/cell-formatters";
+import { ProgressBarDisplay } from "@/ee/base/components/cells/progress-bar-display";
 import { buildPageUrl, getPageTitle } from "@/features/page/page.utils";
 import { FileValue } from "@/ee/base/components/cells/cell-file";
 import cellClasses from "@/ee/base/styles/cells.module.css";
@@ -101,7 +102,11 @@ function LongTextField({ value }: { value: unknown }) {
 function NumberField({ value, property }: { value: unknown; property: IBaseProperty }) {
   const num = typeof value === "number" ? value : null;
   if (num === null) return null;
-  const formatted = formatNumber(num, property.typeOptions as NumberTypeOptions | undefined);
+  const opts = property.typeOptions as NumberTypeOptions | undefined;
+  if (opts?.format === "progress") {
+    return <ProgressBarDisplay value={num} size="xs" />;
+  }
+  const formatted = formatNumber(num, opts);
   if (!formatted) return null;
   return <Text size="sm">{formatted}</Text>;
 }
@@ -171,11 +176,15 @@ function PersonField({ value, pageId }: { value: unknown; pageId: string }) {
 }
 
 function LastEditedByField({ value, pageId }: { value: unknown; pageId: string }) {
+  const { t } = useTranslation();
   const userId = typeof value === "string" ? value : null;
   const store = useReferenceStore(pageId);
   if (!userId) return null;
   const user = store.users[userId] ?? null;
-  const name = user?.name ?? userId.substring(0, 8);
+  const name =
+    typeof user?.name === "string" && user.name.trim().length > 0
+      ? user.name.trim()
+      : t("Unknown user");
   return (
     <Group gap={6} wrap="nowrap" style={{ overflow: "hidden" }}>
       <CustomAvatar avatarUrl={user?.avatarUrl ?? ""} name={name} size={20} radius="xl" />

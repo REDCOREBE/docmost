@@ -10,6 +10,7 @@ import type {
   IBaseRow,
   IBaseView,
   SelectTypeOptions,
+  UserRef,
   ViewConfig,
 } from "@/ee/base/types/base.types";
 import type {
@@ -30,6 +31,7 @@ export const SYS = {
   status: "sys:status",
   priority: "sys:priority",
   progress: "sys:progress",
+  startDate: "sys:startDate",
   dueDate: "sys:dueDate",
   assignees: "sys:assignees",
   linkedPage: "sys:linkedPage",
@@ -96,15 +98,19 @@ function prop(
   },
   workspaceId: string,
 ): IBaseProperty {
-  return {
+  const result: IBaseProperty = {
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
     workspaceId,
     typeOptions: {},
     ...partial,
-    // Empty: CellPage/useBaseQuery must not hit /api/bases for Tasks.
-    pageId: "",
   };
+  // Page cells use useBaseQuery(property.pageId); keep empty so Tasks never hits /api/bases.
+  // Person/other cells use the real Tasks pageId as referenceStore key.
+  if (result.type === "page") {
+    result.pageId = "";
+  }
+  return result;
 }
 
 export function buildSystemProperties(opts: {
@@ -164,6 +170,18 @@ export function buildSystemProperties(opts: {
         type: "number",
         position: "a3",
         typeOptions: { format: "progress" },
+        isPrimary: false,
+      },
+      workspaceId,
+    ),
+    prop(
+      {
+        id: SYS.startDate,
+        pageId,
+        name: "Start date",
+        type: "date",
+        position: "a3b",
+        typeOptions: {},
         isPrimary: false,
       },
       workspaceId,
@@ -251,7 +269,7 @@ export function mapTaskPropertyToBase(
   }
   return {
     id: property.id,
-    pageId: "",
+    pageId: baseType === "page" ? "" : pageId,
     name: property.name,
     type: baseType,
     position: property.position,
@@ -322,6 +340,7 @@ export function mapTaskToBaseRow(
     [SYS.status]: task.status,
     [SYS.priority]: task.priority,
     [SYS.progress]: task.progress,
+    [SYS.startDate]: task.startDate ?? null,
     [SYS.dueDate]: task.dueDate ?? null,
     [SYS.assignees]: (task.assignees ?? []).map((a) => a.id),
     [SYS.linkedPage]: task.linkedPageId ?? null,
@@ -345,16 +364,58 @@ export function mapTaskToBaseRow(
   };
 }
 
+/**
+ * Unique UserRefs from task assignee payloads for referenceStore hydration.
+ * No extra fetch — only users already present on accessible tasks.
+ */
+export function collectAssigneeUserRefs(
+  tasks: Array<Pick<TaskItem, "assignees">>,
+): UserRef[] {
+  const byId = new Map<string, UserRef>();
+  for (const task of tasks) {
+    for (const a of task.assignees ?? []) {
+      if (!a?.id || byId.has(a.id)) continue;
+      const name =
+        typeof a.name === "string" && a.name.trim().length > 0
+          ? a.name.trim()
+          : null;
+      byId.set(a.id, {
+        id: a.id,
+        name,
+        avatarUrl: a.avatarUrl ?? null,
+      });
+    }
+  }
+  return [...byId.values()];
+}
+
 export function mapTaskViewToBaseView(
   view: TaskView,
   pageId: string,
 ): IBaseView {
   const config = (view.config ?? {}) as ViewConfig;
+  const type: IBaseView["type"] =
+    view.type === "kanban"
+      ? "kanban"
+      : view.type === "gantt"
+        ? "gantt"
+        : "table";
+  const ganttDefaults =
+    type === "gantt"
+      ? {
+          startPropertyId: SYS.startDate,
+          endPropertyId: SYS.dueDate,
+          zoom: "week" as const,
+          showToday: true,
+          showWeekends: true,
+          barPropertyIds: [] as string[],
+        }
+      : undefined;
   return {
     id: view.id,
     pageId,
     name: view.name,
-    type: view.type === "kanban" ? "kanban" : "table",
+    type,
     config: {
       ...config,
       groupByPropertyId:
@@ -363,6 +424,16 @@ export function mapTaskViewToBaseView(
       visiblePropertyIds:
         config.visiblePropertyIds ??
         (view.config as { visiblePropertyIds?: string[] })?.visiblePropertyIds,
+      gantt:
+        type === "gantt"
+          ? {
+              ...ganttDefaults!,
+              ...config.gantt,
+              startPropertyId:
+                config.gantt?.startPropertyId ?? SYS.startDate,
+              endPropertyId: config.gantt?.endPropertyId ?? SYS.dueDate,
+            }
+          : config.gantt,
     },
     position: view.position,
     workspaceId: view.workspaceId,
@@ -370,84 +441,6 @@ export function mapTaskViewToBaseView(
     createdAt: view.createdAt,
     updatedAt: view.updatedAt,
   };
-}
-
-/** Built-in table/kanban views when none saved yet. */
-export function defaultTaskViews(pageId: string, workspaceId: string): IBaseView[] {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: "builtin:table",
-      pageId,
-      name: "Table",
-      type: "table",
-      config: {
-        // Include primary title — Base visibility treats this list as exclusive.
-        visiblePropertyIds: [
-          SYS.title,
-          SYS.status,
-          SYS.priority,
-          SYS.dueDate,
-          SYS.assignees,
-        ],
-      },
-      position: "a0",
-      workspaceId,
-      creatorId: "",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "builtin:kanban",
-      pageId,
-      name: "Kanban",
-      type: "kanban",
-      config: {
-        groupByPropertyId: SYS.status,
-        visiblePropertyIds: [SYS.priority, SYS.dueDate, SYS.assignees],
-      },
-      position: "a1",
-      workspaceId,
-      creatorId: "",
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
-}
-
-/** System views for global /tasks scopes (native tabs, not a second chrome). */
-export function globalScopeViews(
-  pageId: string,
-  workspaceId: string,
-): IBaseView[] {
-  const now = new Date().toISOString();
-  const board = defaultTaskViews(pageId, workspaceId)[1];
-  return [
-    {
-      ...board,
-      id: "scope:all",
-      name: "All tasks",
-      position: "s0",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      ...board,
-      id: "scope:mine",
-      name: "My tasks",
-      position: "s1",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      ...board,
-      id: "scope:overdue",
-      name: "Overdue",
-      position: "s2",
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
 }
 
 export function buildTasksBase(opts: {
@@ -476,10 +469,8 @@ export function buildTasksBase(opts: {
     ...customProperties.map((p) => mapTaskPropertyToBase(p, pageId)),
   ];
 
-  const mappedViews =
-    views.length > 0
-      ? views.map((v) => mapTaskViewToBaseView(v, pageId))
-      : defaultTaskViews(pageId, workspaceId);
+  // Real task_views only — server lazy-seeds defaults; no client builtins.
+  const mappedViews = views.map((v) => mapTaskViewToBaseView(v, pageId));
 
   return {
     id: pageId,
@@ -509,6 +500,7 @@ export type TaskCellMutation =
         status?: TaskStatus;
         priority?: TaskPriority;
         progress?: number;
+        startDate?: string | null;
         dueDate?: string | null;
         assigneeIds?: string[];
         linkedPageId?: string | null;
@@ -551,6 +543,14 @@ export function cellUpdateToTaskMutation(
     return {
       kind: "system",
       patch: { progress: Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0 },
+    };
+  }
+  if (propertyId === SYS.startDate) {
+    return {
+      kind: "system",
+      patch: {
+        startDate: value == null || value === "" ? null : String(value),
+      },
     };
   }
   if (propertyId === SYS.dueDate) {
@@ -650,10 +650,33 @@ export function cellUpdateToTaskMutation(
 }
 
 export function viewTypeFromBase(type: IBaseView["type"]): TaskViewType {
-  return type === "kanban" ? "kanban" : "table";
+  if (type === "kanban") return "kanban";
+  if (type === "gantt") return "gantt";
+  return "table";
 }
 
-/** Client-side filter evaluator for Tasks rows (KanbanColumn ports.filterRows). */
+/** Normalize filter operands the same way Base engine `asStringArray` does. */
+export function asStringArray(val: unknown): string[] {
+  if (val == null) return [];
+  if (Array.isArray(val)) {
+    return val.filter((v) => v != null).map(String);
+  }
+  return [String(val)];
+}
+
+function cellIdList(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  return raw.filter((v) => v != null).map(String);
+}
+
+/**
+ * Client-side filter evaluator for Tasks rows (Table + KanbanColumn ports.filterRows).
+ * Person / multi-id cells mirror Base `arrayOfIdsCondition` (multi person):
+ * - eq / "Is" → cell contains all operand id(s) (@> semantics)
+ * - neq → empty OR not contains
+ * - any → intersects
+ * - none → empty OR no intersection
+ */
 export function matchTaskRowFilter(
   row: IBaseRow,
   filter: import("@/ee/base/types/base.types").FilterNode | undefined,
@@ -667,15 +690,31 @@ export function matchTaskRowFilter(
     return filter.children.some((c) => matchTaskRowFilter(row, c));
   }
   const raw = row.cells[filter.propertyId];
+  const ids = cellIdList(raw);
   const empty =
     raw == null ||
     raw === "" ||
     (Array.isArray(raw) && raw.length === 0);
   switch (filter.op) {
-    case "eq":
-      return raw === filter.value;
-    case "neq":
-      return raw !== filter.value;
+    case "eq": {
+      if (ids) {
+        const needles = asStringArray(filter.value);
+        if (needles.length === 0) return false;
+        return needles.every((n) => ids.includes(n));
+      }
+      if (filter.value == null) return false;
+      return String(raw) === String(filter.value);
+    }
+    case "neq": {
+      if (ids) {
+        const needles = asStringArray(filter.value);
+        if (needles.length === 0) return false;
+        if (ids.length === 0) return true;
+        return !needles.every((n) => ids.includes(n));
+      }
+      if (filter.value == null) return false;
+      return raw == null || String(raw) !== String(filter.value);
+    }
     case "isEmpty":
       return empty;
     case "isNotEmpty":
@@ -686,15 +725,66 @@ export function matchTaskRowFilter(
         typeof filter.value === "string" &&
         raw.toLowerCase().includes(filter.value.toLowerCase())
       );
-    case "any":
+    case "ncontains":
       return (
-        Array.isArray(raw) &&
-        Array.isArray(filter.value) &&
-        filter.value.some((v) => raw.includes(v))
+        typeof raw === "string" &&
+        typeof filter.value === "string" &&
+        !raw.toLowerCase().includes(filter.value.toLowerCase())
       );
+    case "any": {
+      if (!ids) return false;
+      const needles = asStringArray(filter.value);
+      if (needles.length === 0) return false;
+      return needles.some((n) => ids.includes(n));
+    }
+    case "none": {
+      const needles = asStringArray(filter.value);
+      if (needles.length === 0) return true;
+      if (!ids || ids.length === 0) return true;
+      return !needles.some((n) => ids.includes(n));
+    }
+    case "before":
+    case "after":
+    case "onOrBefore":
+    case "onOrAfter": {
+      if (raw == null || raw === "") return false;
+      const cellTime = Date.parse(String(raw));
+      if (Number.isNaN(cellTime)) return false;
+      const bound = resolveFilterDateBound(filter.value);
+      if (bound == null) return true;
+      if (filter.op === "before") return cellTime < bound;
+      if (filter.op === "after") return cellTime > bound;
+      if (filter.op === "onOrBefore") return cellTime <= bound;
+      return cellTime >= bound;
+    }
     default:
       return true;
   }
+}
+
+/** Resolve Base DateFilterValue (or ISO string) to a UTC ms bound. */
+function resolveFilterDateBound(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    const t = Date.parse(value);
+    return Number.isNaN(t) ? null : t;
+  }
+  if (typeof value !== "object") return null;
+  const v = value as {
+    mode?: string;
+    preset?: string;
+    date?: string;
+  };
+  if (v.mode === "exact" && typeof v.date === "string") {
+    const t = Date.parse(v.date);
+    return Number.isNaN(t) ? null : t;
+  }
+  if (v.mode === "relative" && v.preset === "today") {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+  return null;
 }
 
 export function filterTaskRows(

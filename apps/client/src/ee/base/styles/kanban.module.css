@@ -139,6 +139,25 @@
   color: var(--mantine-color-dimmed);
 }
 
+.cardFooter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
+}
+
+.cardFooterRow {
+  min-width: 0;
+}
+
+.cardFooterIcon {
+  flex-shrink: 0;
+  color: var(--mantine-color-dimmed);
+  opacity: 0.85;
+}
+
 .count {
   color: var(--mantine-color-dimmed);
   font-size: var(--mantine-font-size-sm);

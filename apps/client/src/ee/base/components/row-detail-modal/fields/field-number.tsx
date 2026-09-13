@@ -5,6 +5,7 @@ import {
   parseNumberDraft,
   sanitizeNumberInput,
 } from "@/ee/base/components/cells/cell-number";
+import { ProgressBarDisplay } from "@/ee/base/components/cells/progress-bar-display";
 import { FieldProps, FieldShell } from "./detail-field";
 import classes from "@/ee/base/styles/row-detail-modal.module.css";
 
@@ -13,6 +14,7 @@ const toDraft = (value: unknown) =>
 
 export function FieldNumber({ property, value, readOnly, onChange }: FieldProps) {
   const typeOptions = property.typeOptions as NumberTypeOptions | undefined;
+  const isProgress = typeOptions?.format === "progress";
   const numValue = typeof value === "number" ? value : null;
   const [draft, setDraft] = useState(toDraft(value));
   const [focused, setFocused] = useState(false);
@@ -27,6 +29,13 @@ export function FieldNumber({ property, value, readOnly, onChange }: FieldProps)
   const formatted = formatNumber(numValue, typeOptions);
 
   if (readOnly) {
+    if (isProgress && numValue != null) {
+      return (
+        <FieldShell>
+          <ProgressBarDisplay value={numValue} size="sm" />
+        </FieldShell>
+      );
+    }
     return (
       <FieldShell>
         <span className={classes.fieldValueText}>{formatted}</span>
@@ -44,6 +53,24 @@ export function FieldNumber({ property, value, readOnly, onChange }: FieldProps)
     if (parseNumberDraft(draft) !== numValue) onChange(parseNumberDraft(draft));
   };
 
+  if (isProgress && !focused) {
+    return (
+      <FieldShell
+        cursor="text"
+        onClick={() => {
+          setDraft(toDraft(value));
+          setFocused(true);
+        }}
+      >
+        {numValue != null ? (
+          <ProgressBarDisplay value={numValue} size="sm" />
+        ) : (
+          <span className={classes.fieldValueText}>{formatted}</span>
+        )}
+      </FieldShell>
+    );
+  }
+
   return (
     <FieldShell cursor="text">
       <input
@@ -51,6 +78,7 @@ export function FieldNumber({ property, value, readOnly, onChange }: FieldProps)
         inputMode="decimal"
         className={classes.fieldInput}
         value={focused ? draft : formatted}
+        autoFocus={isProgress && focused}
         onFocus={() => {
           setDraft(toDraft(value));
           setFocused(true);

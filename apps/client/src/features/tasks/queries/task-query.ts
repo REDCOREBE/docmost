@@ -15,6 +15,7 @@ import {
   getTaskProperties,
   getTaskViews,
   getTasks,
+  getTasksCount,
   setTaskPropertyValue,
   updateTask,
   updateTaskProperty,
@@ -52,6 +53,17 @@ export function useTaskViewsQuery(spaceId?: string) {
   });
 }
 
+export const TASKS_MINE_OPEN_COUNT_KEY = ["tasks", "count", "mine-open"] as const;
+
+export function useTasksMineOpenCountQuery() {
+  return useQuery({
+    queryKey: TASKS_MINE_OPEN_COUNT_KEY,
+    queryFn: () => getTasksCount("mine-open"),
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
 export function useTaskPropertiesQuery(spaceId?: string) {
   return useQuery({
     queryKey: ["task-properties", spaceId],
@@ -80,6 +92,7 @@ export function useCreateTaskMutation() {
     mutationFn: (data: CreateTaskParams) => createTask(data),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: TASKS_MINE_OPEN_COUNT_KEY });
       queryClient.setQueryData(taskInfoQueryKey(created.id), created);
     },
   });
@@ -91,6 +104,7 @@ export function useUpdateTaskMutation() {
     mutationFn: (data: UpdateTaskParams) => updateTask(data),
     onSuccess: (updated, variables) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: TASKS_MINE_OPEN_COUNT_KEY });
       queryClient.setQueryData(taskInfoQueryKey(variables.taskId), updated);
     },
   });
@@ -102,6 +116,7 @@ export function useDeleteTaskMutation() {
     mutationFn: (taskId: string) => deleteTask(taskId),
     onSuccess: (_r, taskId) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: TASKS_MINE_OPEN_COUNT_KEY });
       queryClient.removeQueries({ queryKey: taskInfoQueryKey(taskId) });
     },
   });

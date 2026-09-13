@@ -6,6 +6,7 @@ import { formatCurrency } from "@/ee/base/constants/currencies";
 import { snapNumber } from "@docmost/base-formula/client";
 import { useEditableTextCell } from "@/ee/base/hooks/use-editable-text-cell";
 import { AutoTooltipText } from "@/components/ui/auto-tooltip-text";
+import { ProgressBarDisplay } from "@/ee/base/components/cells/progress-bar-display";
 import cellClasses from "@/ee/base/styles/cells.module.css";
 
 type CellNumberProps = {
@@ -144,6 +145,10 @@ export function CellNumber({
   const numValue = typeof value === "number" ? value : null;
   if (numValue == null) {
     return <span className={cellClasses.emptyValue} />;
+  }
+
+  if (typeOptions?.format === "progress") {
+    return <ProgressBarDisplay value={numValue} size="xs" />;
   }
 
   return (

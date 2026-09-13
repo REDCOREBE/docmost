@@ -33,19 +33,28 @@ import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 
 export function useCreateViewMutation() {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
   return useMutation<IBaseView, Error, CreateViewInput>({
-    mutationFn: (data) => createView(data),
+    mutationFn: (data) => {
+      if (ports?.createView) {
+        return ports.createView({
+          pageId: data.pageId,
+          name: data.name,
+          type: data.type ?? "table",
+          config: data.config,
+        });
+      }
+      return createView(data);
+    },
     onSuccess: (newView) => {
-      queryClient.setQueryData<IBase>(
-        ["bases", newView.pageId],
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            views: [...old.views, newView],
-          };
-        },
-      );
+      if (ports?.createView) return;
+      queryClient.setQueryData<IBase>(["bases", newView.pageId], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          views: [...old.views, newView],
+        };
+      });
     },
     onError: (error) => {
       notifications.show({
@@ -59,8 +68,23 @@ export function useCreateViewMutation() {
 export function useUpdateViewMutation() {
   const { t } = useTranslation();
   const ports = useBaseDataPorts();
-  return useMutation<IBaseView, Error, UpdateViewInput, { previous: IBase | undefined }>({
+  return useMutation<
+    IBaseView,
+    Error,
+    UpdateViewInput,
+    { previous: IBase | undefined }
+  >({
     mutationFn: async (data) => {
+      if (ports?.updateViewMeta) {
+        return ports.updateViewMeta({
+          pageId: data.pageId,
+          viewId: data.viewId,
+          name: data.name,
+          type: data.type,
+          position: data.position,
+          config: data.config,
+        });
+      }
       if (ports?.persistViewConfig && data.config !== undefined) {
         ports.persistViewConfig({
           viewId: data.viewId,
@@ -83,7 +107,7 @@ export function useUpdateViewMutation() {
       return updateView(data);
     },
     onMutate: async (variables) => {
-      if (ports?.persistViewConfig) {
+      if (ports?.updateViewMeta || ports?.persistViewConfig) {
         return { previous: undefined };
       }
       await queryClient.cancelQueries({
@@ -95,39 +119,42 @@ export function useUpdateViewMutation() {
         variables.pageId,
       ]);
 
-      queryClient.setQueryData<IBase>(
-        ["bases", variables.pageId],
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            views: old.views.map((v) =>
-              v.id === variables.viewId
-                ? {
-                    ...v,
-                    ...(variables.name !== undefined && {
-                      name: variables.name,
-                    }),
-                    ...(variables.type !== undefined && {
-                      type: variables.type,
-                    }),
-                    ...(variables.config !== undefined && {
-                      config: applyConfigPatch(v.config, variables.config),
-                    }),
-                    ...(variables.position !== undefined && {
-                      position: variables.position,
-                    }),
-                  }
-                : v,
-            ),
-          };
-        },
-      );
+      queryClient.setQueryData<IBase>(["bases", variables.pageId], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          views: old.views.map((v) =>
+            v.id === variables.viewId
+              ? {
+                  ...v,
+                  ...(variables.name !== undefined && {
+                    name: variables.name,
+                  }),
+                  ...(variables.type !== undefined && {
+                    type: variables.type,
+                  }),
+                  ...(variables.config !== undefined && {
+                    config: applyConfigPatch(v.config, variables.config),
+                  }),
+                  ...(variables.position !== undefined && {
+                    position: variables.position,
+                  }),
+                }
+              : v,
+          ),
+        };
+      });
 
       return { previous };
     },
     onError: (error, variables, context) => {
-      if (ports?.persistViewConfig) return;
+      if (ports?.updateViewMeta || ports?.persistViewConfig) {
+        notifications.show({
+          message: getApiErrorMessage(error, t("Failed to update view")),
+          color: "red",
+        });
+        return;
+      }
       if (context?.previous) {
         queryClient.setQueryData(
           ["bases", variables.pageId],
@@ -140,7 +167,7 @@ export function useUpdateViewMutation() {
       });
     },
     onSuccess: (updatedView) => {
-      if (ports?.persistViewConfig) return;
+      if (ports?.updateViewMeta || ports?.persistViewConfig) return;
       queryClient.setQueryData<IBase>(
         ["bases", updatedView.pageId],
         (old) => {
@@ -159,19 +186,26 @@ export function useUpdateViewMutation() {
 
 export function useDeleteViewMutation() {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
   return useMutation<void, Error, DeleteViewInput>({
-    mutationFn: (data) => deleteView(data),
+    mutationFn: (data) => {
+      if (ports?.deleteView) {
+        return ports.deleteView({
+          pageId: data.pageId,
+          viewId: data.viewId,
+        });
+      }
+      return deleteView(data);
+    },
     onSuccess: (_, variables) => {
-      queryClient.setQueryData<IBase>(
-        ["bases", variables.pageId],
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            views: old.views.filter((v) => v.id !== variables.viewId),
-          };
-        },
-      );
+      if (ports?.deleteView) return;
+      queryClient.setQueryData<IBase>(["bases", variables.pageId], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          views: old.views.filter((v) => v.id !== variables.viewId),
+        };
+      });
     },
     onError: (error) => {
       notifications.show({

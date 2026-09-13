@@ -1,24 +1,22 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActionIcon,
   Badge,
   Group,
   Tooltip,
-  UnstyledButton,
-  Text,
 } from "@mantine/core";
 import {
   IconAdjustments,
   IconEye,
   IconFilter,
   IconLayoutColumns,
-  IconLayoutKanban,
-  IconPlus,
   IconSortAscending,
-  IconTable,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { useAtom } from "jotai";
 import { notifications } from "@mantine/notifications";
+import { generateJitteredKeyBetween } from "fractional-indexing-jittered";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Table as TanstackTable } from "@tanstack/react-table";
 import type {
   BasePropertyType,
@@ -27,39 +25,52 @@ import type {
   FilterNode,
   IBase,
   IBaseProperty,
-  IBaseRow,
   IBaseView,
   TypeOptions,
   ViewConfig,
   ViewConfigPatch,
-  ViewSortConfig,
 } from "@/ee/base/types/base.types";
+import { ViewTabs } from "@/ee/base/components/views/view-tabs";
 import { ViewFilterConfigPopover } from "@/ee/base/components/views/view-filter-config";
 import { ViewSortConfigPopover } from "@/ee/base/components/views/view-sort-config";
 import { ViewPropertyVisibility } from "@/ee/base/components/views/view-property-visibility";
 import { KanbanGroupByPicker } from "@/ee/base/components/kanban/kanban-group-by-picker";
 import { KanbanCardProperties } from "@/ee/base/components/kanban/kanban-card-properties";
 import { RowDetailModal } from "@/ee/base/components/row-detail-modal/row-detail-modal";
+import { BaseViewDraftBanner } from "@/ee/base/components/base-view-draft-banner";
 import { BaseEditableProvider } from "@/ee/base/context/base-editable";
 import {
   BaseDataPortsProvider,
   type BaseDataPorts,
 } from "@/ee/base/context/base-data-ports";
+import { activeViewIdAtomFamily } from "@/ee/base/atoms/base-atoms";
+import { useViewDraft } from "@/ee/base/hooks/use-view-draft";
+import { useHydrateUsers } from "@/ee/base/reference/reference-store";
+import useCurrentUser from "@/features/user/hooks/use-current-user";
 import { TasksNativeTable } from "./tasks-native-table";
 import { TasksNativeKanban } from "./tasks-native-kanban";
-import type { TaskProperty, TaskStatus } from "../../types/task.types";
+import { TasksNativeGantt } from "./tasks-native-gantt";
+import { TasksKanbanCardFooter } from "./tasks-kanban-card-footer";
+import { GanttToolbarControls } from "@/ee/base/components/gantt/gantt-view";
+import type { GanttViewConfig, IBaseRow } from "@/ee/base/types/base.types";
+import type { TaskItem, TaskProperty, TaskStatus } from "../../types/task.types";
 import {
   SYS,
   cellUpdateToTaskMutation,
+  collectAssigneeUserRefs,
   filterTaskRows,
   mapBasePropertyTypeToTask,
+  mapTaskPropertyToBase,
   mapTaskToBaseRow,
+  mapTaskViewToBaseView,
   viewTypeFromBase,
 } from "../../adapter/tasks-native-ui-adapter";
 import {
   useCreateTaskMutation,
   useCreateTaskPropertyMutation,
+  useCreateTaskViewMutation,
   useDeleteTaskMutation,
+  useDeleteTaskViewMutation,
   useSetTaskPropertyValueMutation,
   useUpdateTaskMutation,
   useUpdateTaskViewMutation,
@@ -71,26 +82,18 @@ import toolbarClasses from "@/ee/base/styles/base-toolbar.module.css";
 type Props = {
   base: IBase;
   rows: IBaseRow[];
+  tasks: TaskItem[];
   customProperties: TaskProperty[];
   isGlobal: boolean;
-  scope?: "all" | "mine" | "overdue";
   canCreate: boolean;
   canManageProperties: boolean;
   propertySpaceId?: string;
-  /** Space used to create tasks (space page or first writable on global). */
   createSpaceId?: string;
   onCreate: (preset?: { status?: TaskStatus }) => void | Promise<void>;
   onStatusChange: (rowId: string, status: TaskStatus) => void | Promise<void>;
-  onScopeChange?: (scope: "all" | "mine" | "overdue") => void;
   openRowId: string | null;
   onOpenRow: (rowId: string | null) => void;
 };
-
-function viewTabLabel(view: IBaseView, t: (k: string) => string): string {
-  if (view.type === "kanban") return t("Kanban");
-  if (view.name === "Table" || view.type === "table") return t("Table");
-  return t(view.name);
-}
 
 function applyConfigPatch(
   existing: ViewConfig | undefined,
@@ -104,36 +107,42 @@ function applyConfigPatch(
   return merged as ViewConfig;
 }
 
+function sortViewsByPosition(views: IBaseView[]): IBaseView[] {
+  return [...views].sort((a, b) =>
+    a.position < b.position ? -1 : a.position > b.position ? 1 : 0,
+  );
+}
+
 export function TasksNativeShell({
   base,
   rows,
+  tasks,
   customProperties,
-  isGlobal,
-  scope = "all",
+  isGlobal: _isGlobal,
   canCreate,
   canManageProperties,
   propertySpaceId,
   createSpaceId,
   onCreate,
   onStatusChange,
-  onScopeChange,
   openRowId,
   onOpenRow,
 }: Props) {
   const { t } = useTranslation();
-  const [activeViewId, setActiveViewId] = useState<string | null>(
-    base.views[0]?.id ?? null,
-  );
+  const { data: currentUser } = useCurrentUser();
+  const queryClient = useQueryClient();
+  const [activeViewId, setActiveViewId] = useAtom(
+    activeViewIdAtomFamily(base.id),
+  ) as unknown as [string | null, (val: string | null) => void];
   const [filterOpened, setFilterOpened] = useState(false);
   const [sortOpened, setSortOpened] = useState(false);
   const [propertiesOpened, setPropertiesOpened] = useState(false);
   const [cardPropertiesOpened, setCardPropertiesOpened] = useState(false);
-  const [draftFilter, setDraftFilter] = useState<FilterGroup | undefined>();
-  const [draftSorts, setDraftSorts] = useState<ViewSortConfig[] | undefined>();
   const [draftViewConfigs, setDraftViewConfigs] = useState<
     Record<string, ViewConfig>
   >({});
   const [table, setTable] = useState<TanstackTable<IBaseRow> | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   const createTask = useCreateTaskMutation();
   const updateTask = useUpdateTaskMutation();
@@ -141,48 +150,92 @@ export function TasksNativeShell({
   const deleteTask = useDeleteTaskMutation();
   const createProperty = useCreateTaskPropertyMutation();
   const updateView = useUpdateTaskViewMutation();
+  const createViewMutation = useCreateTaskViewMutation();
+  const deleteViewMutation = useDeleteTaskViewMutation();
+
+  const hydrateUsers = useHydrateUsers(base.id);
+
+  useEffect(() => {
+    const refs = collectAssigneeUserRefs(tasks);
+    if (refs.length > 0) hydrateUsers(refs);
+  }, [tasks, hydrateUsers]);
 
   const views: IBaseView[] = base.views;
+  const orderedViews = useMemo(() => sortViewsByPosition(views), [views]);
+
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("view");
+    if (fromUrl && orderedViews.some((v) => v.id === fromUrl)) {
+      setActiveViewId(fromUrl);
+      return;
+    }
+    if (activeViewId && orderedViews.some((v) => v.id === activeViewId)) {
+      return;
+    }
+    if (orderedViews[0]) {
+      setActiveViewId(orderedViews[0].id);
+    }
+  }, [orderedViews, activeViewId, setActiveViewId]);
 
   const activeViewBase = useMemo(() => {
-    if (!views.length) return undefined;
-    return views.find((v) => v.id === activeViewId) ?? views[0];
-  }, [views, activeViewId]);
+    if (!orderedViews.length) return undefined;
+    return orderedViews.find((v) => v.id === activeViewId) ?? orderedViews[0];
+  }, [orderedViews, activeViewId]);
+
+  const {
+    effectiveFilter,
+    effectiveSorts,
+    isDirty,
+    setFilter: setDraftFilter,
+    setSorts: setDraftSorts,
+    reset: resetDraft,
+    buildPromotedConfig,
+  } = useViewDraft({
+    userId: currentUser?.user?.id,
+    pageId: base.id,
+    viewId: activeViewBase?.id,
+    baselineFilter: activeViewBase?.config?.filter,
+    baselineSorts: activeViewBase?.config?.sorts,
+  });
 
   const activeView = useMemo(() => {
     if (!activeViewBase) return undefined;
-    const draft = draftViewConfigs[activeViewBase.id];
-    if (!draft) return activeViewBase;
+    const layoutDraft = draftViewConfigs[activeViewBase.id];
     return {
       ...activeViewBase,
-      config: { ...activeViewBase.config, ...draft },
+      config: {
+        ...activeViewBase.config,
+        ...(layoutDraft ?? {}),
+        filter: effectiveFilter,
+        sorts: effectiveSorts,
+      },
     };
-  }, [activeViewBase, draftViewConfigs]);
+  }, [activeViewBase, draftViewConfigs, effectiveFilter, effectiveSorts]);
 
   const viewType = activeView ? viewTypeFromBase(activeView.type) : "table";
 
-  const handleViewChange = useCallback((viewId: string) => {
-    setActiveViewId(viewId);
-  }, []);
-
-  const scopeTabs: { id: "all" | "mine" | "overdue"; label: string }[] = [
-    { id: "all", label: t("All tasks") },
-    { id: "mine", label: t("My tasks") },
-    { id: "overdue", label: t("Overdue") },
-  ];
+  const handleViewChange = useCallback(
+    (viewId: string) => {
+      setActiveViewId(viewId);
+    },
+    [setActiveViewId],
+  );
 
   const conditions = useMemo<FilterCondition[]>(() => {
-    const filter = draftFilter ?? activeView?.config?.filter;
+    const filter = effectiveFilter;
     if (!filter || filter.op !== "and") return [];
     return filter.children.filter(
       (c): c is FilterCondition => !("children" in c),
     );
-  }, [draftFilter, activeView?.config?.filter]);
+  }, [effectiveFilter]);
 
-  const sorts = draftSorts ?? activeView?.config?.sorts ?? [];
+  const sorts = effectiveSorts ?? [];
+  const viewFilter: FilterGroup | undefined = effectiveFilter;
 
-  const viewFilter: FilterGroup | undefined =
-    draftFilter ?? activeView?.config?.filter;
+  const filteredRows = useMemo(
+    () => filterTaskRows(rows, base.id, viewFilter),
+    [rows, base.id, viewFilter],
+  );
 
   const hiddenPropertyCount = useMemo(() => {
     if (!table) return 0;
@@ -191,6 +244,42 @@ export function TasksNativeShell({
       .filter((col) => col.id !== "__row_number");
     return cols.filter((col) => col.getCanHide() && !col.getIsVisible()).length;
   }, [table, table?.getState().columnVisibility]);
+
+  const viewsQueryKey = ["task-views", propertySpaceId ?? "global"] as const;
+
+  const canSaveView = useMemo(() => {
+    if (!activeViewBase || !currentUser?.user?.id) return false;
+    if (activeViewBase.creatorId) {
+      return activeViewBase.creatorId === currentUser.user.id;
+    }
+    return canManageProperties;
+  }, [activeViewBase, currentUser?.user?.id, canManageProperties]);
+
+  const handleSaveDraft = useCallback(async () => {
+    if (!activeViewBase) return;
+    const config = buildPromotedConfig(activeViewBase.config);
+    setSavingDraft(true);
+    try {
+      await updateView.mutateAsync({
+        viewId: activeViewBase.id,
+        config: config as any,
+      });
+      resetDraft();
+      await queryClient.invalidateQueries({ queryKey: ["task-views"] });
+      notifications.show({ message: t("View updated for everyone") });
+    } catch {
+      // mutation toast
+    } finally {
+      setSavingDraft(false);
+    }
+  }, [
+    activeViewBase,
+    buildPromotedConfig,
+    updateView,
+    resetDraft,
+    queryClient,
+    t,
+  ]);
 
   const persistViewConfig = useCallback(
     (input: {
@@ -208,7 +297,6 @@ export function TasksNativeShell({
           [input.viewId]: applyConfigPatch(baseCfg, input.config),
         };
       });
-      if (input.viewId.startsWith("builtin:")) return;
       updateView.mutate({
         viewId: input.viewId,
         config: input.config as any,
@@ -216,6 +304,12 @@ export function TasksNativeShell({
     },
     [updateView, views],
   );
+
+  const getViewShareUrl = useCallback((viewId: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", viewId);
+    return url.pathname + url.search;
+  }, []);
 
   const ports = useMemo((): BaseDataPorts => {
     return {
@@ -228,57 +322,136 @@ export function TasksNativeShell({
         }
       },
       persistViewConfig,
-      createProperty: canManageProperties
-        ? async (input: {
-            pageId: string;
-            name: string;
-            type: BasePropertyType;
-            typeOptions?: TypeOptions;
-          }): Promise<IBaseProperty> => {
-            const spaceId = propertySpaceId;
-            if (!spaceId) throw new Error("No space for property create");
-            const taskType = mapBasePropertyTypeToTask(input.type);
-            if (!taskType) {
-              notifications.show({
-                color: "red",
-                message: t("Unsupported property type"),
-              });
-              throw new Error("Unsupported property type");
-            }
-            const created = await createProperty.mutateAsync({
-              spaceId,
-              name: input.name,
-              type: taskType,
-              options:
-                input.type === "select" || input.type === "multiSelect"
-                  ? (
-                      (
-                        input.typeOptions as {
-                          choices?: { name: string; color?: string }[];
-                        }
-                      )?.choices ?? []
-                    ).map((c) => ({
-                      name: c.name,
-                      color: c.color ?? "blue",
-                    }))
+      createView: async (input) => {
+        const last = sortViewsByPosition(views).at(-1);
+        const position = generateJitteredKeyBetween(
+          last?.position ?? null,
+          null,
+        );
+        const created = await createViewMutation.mutateAsync({
+          spaceId: propertySpaceId,
+          name: input.name,
+          type:
+            input.type === "kanban"
+              ? "kanban"
+              : input.type === "gantt"
+                ? "gantt"
+                : "table",
+          config: (input.config ?? {}) as any,
+          position,
+          shared: false,
+        });
+        await queryClient.invalidateQueries({ queryKey: viewsQueryKey });
+        const mapped = mapTaskViewToBaseView(created, input.pageId);
+        setActiveViewId(mapped.id);
+        return mapped;
+      },
+      updateViewMeta: async (input) => {
+        const updated = await updateView.mutateAsync({
+          viewId: input.viewId,
+          name: input.name,
+          type:
+            input.type === "kanban"
+              ? "kanban"
+              : input.type === "gantt"
+                ? "gantt"
+                : input.type === "table"
+                  ? "table"
                   : undefined,
-            });
+          position: input.position,
+          config: input.config as any,
+        });
+        await queryClient.invalidateQueries({ queryKey: ["task-views"] });
+        if (input.config) {
+          setDraftViewConfigs((prev) => {
+            const baseCfg =
+              prev[input.viewId] ??
+              views.find((v) => v.id === input.viewId)?.config ??
+              {};
             return {
-              id: created.id,
-              pageId: input.pageId,
-              name: created.name,
-              type: input.type,
-              position: String(created.position ?? ""),
-              typeOptions: input.typeOptions,
-              isPrimary: false,
-              workspaceId: created.workspaceId,
-              createdAt: created.createdAt,
-              updatedAt: created.updatedAt,
+              ...prev,
+              [input.viewId]: applyConfigPatch(baseCfg, input.config!),
             };
-          }
-        : undefined,
+          });
+        }
+        return mapTaskViewToBaseView(updated, input.pageId);
+      },
+      deleteView: async (input) => {
+        await deleteViewMutation.mutateAsync(input.viewId);
+        await queryClient.invalidateQueries({ queryKey: ["task-views"] });
+        if (activeViewId === input.viewId) {
+          const remaining = orderedViews.filter((v) => v.id !== input.viewId);
+          setActiveViewId(remaining[0]?.id ?? null);
+        }
+      },
+      createProperty: async (input: {
+        pageId: string;
+        name: string;
+        type: BasePropertyType;
+        typeOptions?: TypeOptions;
+      }): Promise<IBaseProperty> => {
+        const openTask = openRowId
+          ? tasks.find((t) => t.id === openRowId)
+          : undefined;
+        const spaceId =
+          propertySpaceId ?? openTask?.spaceId ?? createSpaceId;
+        if (!spaceId) {
+          notifications.show({
+            color: "red",
+            message: t("Open a task in a space to add properties"),
+          });
+          throw new Error("No space for property create");
+        }
+        const taskType = mapBasePropertyTypeToTask(input.type);
+        if (!taskType) {
+          notifications.show({
+            color: "red",
+            message: t("Unsupported property type"),
+          });
+          throw new Error("Unsupported property type");
+        }
+        try {
+          const created = await createProperty.mutateAsync({
+            spaceId,
+            name: input.name,
+            type: taskType,
+            options:
+              input.type === "select" || input.type === "multiSelect"
+                ? (
+                    (
+                      input.typeOptions as {
+                        choices?: { name: string; color?: string }[];
+                      }
+                    )?.choices ?? []
+                  ).map((c) => ({
+                    name: c.name,
+                    color: c.color ?? "blue",
+                  }))
+                : undefined,
+          });
+          return mapTaskPropertyToBase(created, input.pageId);
+        } catch (err: unknown) {
+          const message =
+            (err as { response?: { data?: { message?: string } } })?.response
+              ?.data?.message ?? t("Failed to create property");
+          notifications.show({ color: "red", message });
+          throw err;
+        }
+      },
+      renderKanbanCardFooter: (row) => {
+        const visiblePropertyIds =
+          activeView?.config?.visiblePropertyIds ?? [];
+        return (
+          <TasksKanbanCardFooter
+            row={row}
+            visiblePropertyIds={visiblePropertyIds}
+          />
+        );
+      },
+      // Suppress CardField duplicates only for ids the footer may render.
+      kanbanCardFooterPropertyIds: [SYS.space, SYS.dueDate],
       filterRows: (_pageId: string, filter: FilterNode | undefined) =>
-        filterTaskRows(rows, _pageId, filter),
+        filterTaskRows(filteredRows, _pageId, filter),
       createKanbanCard: async (input) => {
         const spaceId = createSpaceId ?? propertySpaceId;
         if (!spaceId) throw new Error("No space");
@@ -294,6 +467,7 @@ export function TasksNativeShell({
           title: "",
           status,
         });
+        hydrateUsers(collectAssigneeUserRefs([created]));
         return mapTaskToBaseRow(created, base.id, customProperties);
       },
       moveKanbanCard: async (input) => {
@@ -339,6 +513,7 @@ export function TasksNativeShell({
       },
       getRow: async (_pageId, rowId) => {
         const task = await getTaskInfo(rowId);
+        hydrateUsers(collectAssigneeUserRefs([task]));
         return mapTaskToBaseRow(task, base.id, customProperties);
       },
     };
@@ -350,14 +525,27 @@ export function TasksNativeShell({
     createProperty,
     propertySpaceId,
     createSpaceId,
-    rows,
+    filteredRows,
     createTask,
     base.id,
     customProperties,
     updateTask,
     onStatusChange,
     onOpenRow,
+    openRowId,
+    tasks,
+    activeView?.config?.visiblePropertyIds,
     setPropertyValue,
+    views,
+    createViewMutation,
+    deleteViewMutation,
+    updateView,
+    queryClient,
+    viewsQueryKey,
+    setActiveViewId,
+    activeViewId,
+    orderedViews,
+    hydrateUsers,
   ]);
 
   const editable = base.permissions?.canEdit ?? false;
@@ -365,72 +553,26 @@ export function TasksNativeShell({
   return (
     <BaseEditableProvider editable={editable}>
       <BaseDataPortsProvider ports={ports}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+            height: "100%",
+          }}
+        >
         <div className={gridClasses.toolbar}>
           <Group gap={4} wrap="nowrap" style={{ overflowX: "auto" }}>
-            {isGlobal &&
-              scopeTabs.map((tab) => {
-                const active = scope === tab.id;
-                return (
-                  <UnstyledButton
-                    key={tab.id}
-                    onClick={() => onScopeChange?.(tab.id)}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: "6px 10px",
-                      borderRadius: 6,
-                      background: active
-                        ? "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5))"
-                        : "transparent",
-                      fontWeight: active ? 600 : 400,
-                    }}
-                  >
-                    <Text size="sm" span>
-                      {tab.label}
-                    </Text>
-                  </UnstyledButton>
-                );
-              })}
-            {views.map((view) => {
-              const active = view.id === activeView?.id;
-              const Icon =
-                view.type === "kanban" ? IconLayoutKanban : IconTable;
-              return (
-                <UnstyledButton
-                  key={view.id}
-                  onClick={() => handleViewChange(view.id)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "6px 10px",
-                    borderRadius: 6,
-                    background: active
-                      ? "light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5))"
-                      : "transparent",
-                    fontWeight: active ? 600 : 400,
-                  }}
-                >
-                  <Icon size={14} />
-                  <Text size="sm" span>
-                    {viewTabLabel(view, t)}
-                  </Text>
-                </UnstyledButton>
-              );
-            })}
-            {canManageProperties && !isGlobal && (
-              <Tooltip label={t("Add view")}>
-                <ActionIcon
-                  variant="subtle"
-                  size="sm"
-                  color="gray"
-                  aria-label={t("Add view")}
-                >
-                  <IconPlus size={16} />
-                </ActionIcon>
-              </Tooltip>
-            )}
+            <ViewTabs
+              views={orderedViews}
+              activeViewId={activeView?.id}
+              pageId={base.id}
+              onViewChange={handleViewChange}
+              base={base}
+              canAddView
+              getViewShareUrl={getViewShareUrl}
+            />
           </Group>
 
           <div className={gridClasses.toolbarRight}>
@@ -506,9 +648,7 @@ export function TasksNativeShell({
                 onClose={() => setPropertiesOpened(false)}
                 table={table}
                 properties={base.properties}
-                onPersist={() => {
-                  /* layout persist via BaseDataPorts inside table */
-                }}
+                onPersist={() => {}}
               >
                 <Tooltip label={t("Hide properties")}>
                   <ActionIcon
@@ -538,8 +678,9 @@ export function TasksNativeShell({
               </ViewPropertyVisibility>
             )}
 
-            {viewType === "kanban" && activeView && (
+            {(viewType === "kanban" || viewType === "gantt") && activeView && (
               <>
+                {viewType === "kanban" && (
                 <KanbanGroupByPicker
                   base={base}
                   view={activeView}
@@ -551,6 +692,7 @@ export function TasksNativeShell({
                     </ActionIcon>
                   </Tooltip>
                 </KanbanGroupByPicker>
+                )}
 
                 <KanbanCardProperties
                   opened={cardPropertiesOpened}
@@ -559,7 +701,13 @@ export function TasksNativeShell({
                   view={activeView}
                   pageId={base.id}
                 >
-                  <Tooltip label={t("Card properties")}>
+                  <Tooltip
+                    label={
+                      viewType === "gantt"
+                        ? t("Visible properties")
+                        : t("Card properties")
+                    }
+                  >
                     <ActionIcon
                       variant="subtle"
                       size="sm"
@@ -577,10 +725,40 @@ export function TasksNativeShell({
                 </KanbanCardProperties>
               </>
             )}
+
+            {viewType === "gantt" && activeView && (
+              <GanttToolbarControls
+                properties={base.properties}
+                gantt={activeView.config?.gantt}
+                onChange={(gantt: GanttViewConfig) => {
+                  persistViewConfig({
+                    viewId: activeView.id,
+                    pageId: base.id,
+                    config: { gantt },
+                  });
+                }}
+              />
+            )}
           </div>
         </div>
 
-        <div style={{ marginTop: 8, minHeight: 320, flex: 1 }}>
+        <BaseViewDraftBanner
+          isDirty={isDirty}
+          canSave={canSaveView}
+          onReset={resetDraft}
+          onSave={() => void handleSaveDraft()}
+          saving={savingDraft}
+        />
+
+        <div
+          style={{
+            marginTop: 8,
+            minHeight: 0,
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           {viewType === "kanban" && activeView ? (
             <TasksNativeKanban
               base={base}
@@ -588,10 +766,18 @@ export function TasksNativeShell({
               viewFilter={viewFilter}
               editable={canCreate && editable}
             />
+          ) : viewType === "gantt" && activeView ? (
+            <TasksNativeGantt
+              base={base}
+              view={activeView}
+              rows={filteredRows}
+              viewFilter={viewFilter}
+              editable={canCreate && editable}
+            />
           ) : (
             <TasksNativeTable
               base={base}
-              rows={rows}
+              rows={filteredRows}
               view={activeView}
               customProperties={customProperties}
               canCreate={canCreate}
@@ -606,11 +792,12 @@ export function TasksNativeShell({
 
         <RowDetailModal
           base={base}
-          rows={rows}
+          rows={filteredRows}
           openRowId={openRowId}
           onClose={() => onOpenRow(null)}
           onNavigate={(id) => onOpenRow(id)}
         />
+        </div>
       </BaseDataPortsProvider>
     </BaseEditableProvider>
   );

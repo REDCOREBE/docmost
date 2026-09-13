@@ -7,10 +7,13 @@
 import { createContext, useContext } from "react";
 import type {
   BasePropertyType,
+  BaseViewType,
   FilterNode,
   IBaseProperty,
   IBaseRow,
+  IBaseView,
   TypeOptions,
+  ViewConfig,
   ViewConfigPatch,
 } from "@/ee/base/types/base.types";
 
@@ -64,8 +67,42 @@ export type BaseDataPorts = {
   /** RowDetailModal deep-link fetch when row not in list. */
   getRow?: (pageId: string, rowId: string) => Promise<IBaseRow | undefined>;
 
+  /**
+   * Optional footer below card properties (e.g. structural context).
+   * When set, KanbanCard renders it after visible CardField rows.
+   */
+  renderKanbanCardFooter?: (row: IBaseRow) => React.ReactNode;
+  /**
+   * Property ids already shown in renderKanbanCardFooter — skipped in CardField
+   * to avoid duplicate rows when those properties are also in visiblePropertyIds.
+   */
+  kanbanCardFooterPropertyIds?: string[];
+
   addRowLabel?: string;
   addCardLabel?: string;
+
+  /**
+   * View lifecycle (ViewTabs / ViewCreateMenu).
+   * When set, Base mutations must not call /bases/views/*.
+   */
+  createView?: (input: {
+    pageId: string;
+    name: string;
+    type: BaseViewType;
+    config?: ViewConfig;
+  }) => Promise<IBaseView>;
+  updateViewMeta?: (input: {
+    pageId: string;
+    viewId: string;
+    name?: string;
+    type?: BaseViewType;
+    position?: string;
+    config?: ViewConfigPatch;
+  }) => Promise<IBaseView>;
+  deleteView?: (input: {
+    pageId: string;
+    viewId: string;
+  }) => Promise<void>;
 };
 
 const BaseDataPortsContext = createContext<BaseDataPorts | null>(null);

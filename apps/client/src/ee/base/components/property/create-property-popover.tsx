@@ -149,6 +149,33 @@ export function CreatePropertyPopover({ pageId, properties, onPropertyCreated, r
     }
   }, [panel]);
 
+  const persistCreate = useCallback(
+    (payload: {
+      pageId: string;
+      name: string;
+      type: BasePropertyType;
+      typeOptions?: TypeOptions;
+    }) => {
+      // When a data-plane adapter is active, never fall back to BaseService
+      // (synthetic pageIds are not UUIDs and must not hit /api/bases).
+      if (ports?.createProperty) {
+        void ports.createProperty(payload).then((created) => {
+          onPropertyCreated?.(created);
+        });
+        return;
+      }
+      if (ports?.disableSchemaMutations) {
+        return;
+      }
+      createPropertyMutation.mutate(payload, {
+        onSuccess: (created) => {
+          onPropertyCreated?.(created);
+        },
+      });
+    },
+    [ports, createPropertyMutation, onPropertyCreated],
+  );
+
   const handleCreate = useCallback(() => {
     if (!selectedType || nameTaken) return;
     const finalName = name.trim() || fallbackName;
@@ -160,20 +187,9 @@ export function CreatePropertyPopover({ pageId, properties, onPropertyCreated, r
         ? typeOptions as TypeOptions
         : undefined,
     };
-    if (ports?.createProperty) {
-      void ports.createProperty(payload).then((created) => {
-        onPropertyCreated?.(created);
-      });
-      handleClose();
-      return;
-    }
-    createPropertyMutation.mutate(payload, {
-      onSuccess: (created) => {
-        onPropertyCreated?.(created);
-      },
-    });
+    persistCreate(payload);
     handleClose();
-  }, [selectedType, nameTaken, name, fallbackName, typeOptions, pageId, createPropertyMutation, handleClose, onPropertyCreated, ports]);
+  }, [selectedType, nameTaken, name, fallbackName, typeOptions, pageId, persistCreate, handleClose]);
 
   const handleBackToTypePicker = useCallback(() => {
     setPanel("typePicker");
@@ -315,21 +331,18 @@ export function CreatePropertyPopover({ pageId, properties, onPropertyCreated, r
                 disabled={nameTaken}
                 onSave={(source, ast, resultType, dependencies) => {
                   if (nameTaken) return;
-                  createPropertyMutation.mutate(
-                    {
-                      pageId,
-                      name: name.trim() || fallbackName,
-                      type: "formula",
-                      typeOptions: {
-                        source,
-                        ast,
-                        resultType,
-                        dependencies,
-                        astVersion: 1,
-                      } as TypeOptions,
-                    },
-                    { onSuccess: (created) => onPropertyCreated?.(created) },
-                  );
+                  persistCreate({
+                    pageId,
+                    name: name.trim() || fallbackName,
+                    type: "formula",
+                    typeOptions: {
+                      source,
+                      ast,
+                      resultType,
+                      dependencies,
+                      astVersion: 1,
+                    } as TypeOptions,
+                  });
                   handleClose();
                 }}
               />

@@ -44,6 +44,15 @@ export async function getTaskViews(spaceId?: string): Promise<TaskView[]> {
   return req.data;
 }
 
+export async function getTasksCount(
+  scope: "mine-open" = "mine-open",
+): Promise<{ count: number; scope: string }> {
+  const req = await api.post<{ count: number; scope: string }>("/tasks/count", {
+    scope,
+  });
+  return req.data;
+}
+
 export async function createTaskView(
   params: CreateTaskViewParams,
 ): Promise<TaskView> {

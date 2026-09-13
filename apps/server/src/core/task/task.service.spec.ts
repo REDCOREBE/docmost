@@ -102,6 +102,7 @@ describe('TaskService ACL and isolation', () => {
             insert: jest.fn(),
             update: jest.fn(),
             delete: jest.fn(),
+            countMineOpen: jest.fn(),
           },
         },
         {
@@ -119,6 +120,8 @@ describe('TaskService ACL and isolation', () => {
             update: jest.fn(),
             delete: jest.fn(),
             findById: jest.fn(),
+            countForScope: jest.fn(),
+            acquireSeedLock: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -440,6 +443,72 @@ describe('TaskService ACL and isolation', () => {
           shared: true,
         }),
       ).resolves.toMatchObject({ ownerUserId: null });
+    });
+
+    it('gantt view create ok', async () => {
+      taskViewRepo.insert.mockResolvedValue({
+        id: 'vg',
+        ownerUserId: null,
+        spaceId,
+        type: 'gantt',
+      } as any);
+      await expect(
+        service.createView(user, workspaceId, {
+          spaceId,
+          name: 'Gantt',
+          type: 'gantt',
+          shared: true,
+          config: {
+            gantt: {
+              startPropertyId: 'sys:startDate',
+              endPropertyId: 'sys:dueDate',
+              zoom: 'week',
+              showToday: true,
+              showWeekends: true,
+            },
+          },
+        } as any),
+      ).resolves.toMatchObject({ type: 'gantt' });
+      expect(taskViewRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'gantt' }),
+      );
+    });
+
+    it('updateView merges config patch without wiping other keys', async () => {
+      taskViewRepo.findById.mockResolvedValue({
+        id: 'v1',
+        workspaceId,
+        spaceId,
+        ownerUserId: null,
+        config: {
+          filter: { op: 'and', children: [] },
+          sorts: [{ propertyId: 'sys:title', direction: 'asc' }],
+          groupByPropertyId: 'sys:status',
+          visiblePropertyIds: ['sys:title'],
+        },
+      } as any);
+      taskViewRepo.update.mockImplementation(async (_id, _ws, patch) => patch as any);
+      await service.updateView(user, workspaceId, {
+        viewId: 'v1',
+        config: {
+          filter: {
+            op: 'and',
+            children: [{ propertyId: 'sys:status', operator: 'is', value: 'todo' }],
+          },
+        },
+      });
+      expect(taskViewRepo.update).toHaveBeenCalledWith(
+        'v1',
+        workspaceId,
+        expect.objectContaining({
+          config: expect.objectContaining({
+            sorts: [{ propertyId: 'sys:title', direction: 'asc' }],
+            groupByPropertyId: 'sys:status',
+            visiblePropertyIds: ['sys:title'],
+            filter: expect.objectContaining({ op: 'and' }),
+          }),
+        }),
+      );
     });
   });
 
@@ -1050,6 +1119,194 @@ describe('TaskService ACL and isolation', () => {
         ).rejects.toBeInstanceOf(BadRequestException);
         expect(taskPropertyValueRepo.upsert).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('view seeds (lazy idempotent)', () => {
+    beforeEach(() => {
+      spaceAbility.createForUser.mockResolvedValue(buildAbility('writer'));
+      taskViewRepo.acquireSeedLock.mockResolvedValue(undefined);
+    });
+
+    it('space empty list seeds shared Tout kanban once under advisory lock', async () => {
+      // outer list empty → enter seed; locked list empty → insert; final list
+      taskViewRepo.list
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: 'v-tout',
+            name: 'Tout',
+            type: 'kanban',
+            ownerUserId: null,
+            spaceId,
+            config: {
+              systemKey: 'space:all',
+              groupByPropertyId: 'sys:status',
+              visiblePropertyIds: ['sys:space', 'sys:dueDate'],
+            },
+            position: 'a0',
+          } as any,
+        ]);
+      taskViewRepo.insert.mockResolvedValue({ id: 'v-tout' } as any);
+
+      const views = await service.listViews(user, workspaceId, spaceId);
+      expect(taskViewRepo.acquireSeedLock).toHaveBeenCalledWith(
+        workspaceId,
+        { spaceId, userId },
+        expect.anything(),
+      );
+      expect(taskViewRepo.insert).toHaveBeenCalledTimes(1);
+      expect(taskViewRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Tout',
+          type: 'kanban',
+          ownerUserId: null,
+          spaceId,
+          position: 'a0',
+          config: expect.objectContaining({
+            systemKey: 'space:all',
+            groupByPropertyId: 'sys:status',
+            visiblePropertyIds: ['sys:space', 'sys:dueDate'],
+          }),
+        }),
+        expect.anything(),
+      );
+      expect(views).toHaveLength(1);
+      expect(views[0].type).toBe('kanban');
+      expect(views[0].name).toBe('Tout');
+    });
+
+    it('space second load returns same seeded id without re-insert', async () => {
+      taskViewRepo.list.mockResolvedValue([
+        {
+          id: 'v-tout',
+          name: 'Tout',
+          type: 'kanban',
+          ownerUserId: null,
+        } as any,
+      ]);
+      const views = await service.listViews(user, workspaceId, spaceId);
+      expect(taskViewRepo.insert).not.toHaveBeenCalled();
+      expect(taskViewRepo.acquireSeedLock).not.toHaveBeenCalled();
+      expect(views).toHaveLength(1);
+      expect(views[0].id).toBe('v-tout');
+    });
+
+    it('space with existing views is unchanged (no seed)', async () => {
+      taskViewRepo.list.mockResolvedValue([
+        { id: 'v-custom', name: 'Mine', type: 'table', ownerUserId: userId } as any,
+        { id: 'v-board', name: 'Board', type: 'kanban', ownerUserId: null } as any,
+      ]);
+      const views = await service.listViews(user, workspaceId, spaceId);
+      expect(taskViewRepo.insert).not.toHaveBeenCalled();
+      expect(taskViewRepo.acquireSeedLock).not.toHaveBeenCalled();
+      expect(views).toHaveLength(2);
+      expect(views.map((v) => v.id)).toEqual(['v-custom', 'v-board']);
+    });
+
+    it('skips insert when lock holder already seeded (concurrent loser)', async () => {
+      taskViewRepo.list
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { id: 'v-tout', name: 'Tout', ownerUserId: null } as any,
+        ]);
+
+      const views = await service.listViews(user, workspaceId, spaceId);
+      expect(taskViewRepo.acquireSeedLock).toHaveBeenCalled();
+      expect(taskViewRepo.insert).not.toHaveBeenCalled();
+      expect(views).toHaveLength(1);
+    });
+
+    it('concurrent empty space listViews n=5 inserts once (serialized lock)', async () => {
+      // Advisory lock serializes callers; model that with shared in-memory state.
+      let viewsState: any[] = [];
+      taskViewRepo.list.mockImplementation(async () => viewsState);
+      taskViewRepo.insert.mockImplementation(async (row) => {
+        const created = {
+          id: 'v-tout',
+          name: row.name,
+          type: row.type,
+          ownerUserId: row.ownerUserId ?? null,
+          position: row.position,
+        };
+        viewsState = [created];
+        return created as any;
+      });
+
+      const results: Awaited<ReturnType<typeof service.listViews>>[] = [];
+      for (let i = 0; i < 5; i++) {
+        results.push(await service.listViews(user, workspaceId, spaceId));
+      }
+
+      expect(taskViewRepo.insert).toHaveBeenCalledTimes(1);
+      expect(taskViewRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'kanban', name: 'Tout' }),
+        expect.anything(),
+      );
+      expect(results).toHaveLength(5);
+      expect(results.every((r) => r.length === 1)).toBe(true);
+      expect(results.every((r) => r[0].id === 'v-tout')).toBe(true);
+      expect(results.every((r) => r[0].type === 'kanban')).toBe(true);
+    });
+
+    it('leftmost/default seeded Space view is Tout kanban at position a0', async () => {
+      taskViewRepo.list
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: 'v-tout',
+            name: 'Tout',
+            type: 'kanban',
+            position: 'a0',
+            ownerUserId: null,
+          } as any,
+        ]);
+      taskViewRepo.insert.mockResolvedValue({ id: 'v-tout' } as any);
+      const views = await service.listViews(user, workspaceId, spaceId);
+      expect(taskViewRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Tout', type: 'kanban', position: 'a0' }),
+        expect.anything(),
+      );
+      expect(views[0]).toMatchObject({ name: 'Tout', type: 'kanban', position: 'a0' });
+    });
+
+    it('global empty list seeds Tout / Mes tâches / En retard', async () => {
+      taskViewRepo.list
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { id: '1', name: 'Tout' },
+          { id: '2', name: 'Mes tâches' },
+          { id: '3', name: 'En retard' },
+        ] as any);
+      taskViewRepo.insert.mockImplementation(async (row) => row as any);
+
+      const views = await service.listViews(user, workspaceId, undefined);
+      expect(taskViewRepo.acquireSeedLock).toHaveBeenCalled();
+      expect(taskViewRepo.insert).toHaveBeenCalledTimes(3);
+      const names = taskViewRepo.insert.mock.calls.map((c) => c[0].name);
+      expect(names).toEqual(['Tout', 'Mes tâches', 'En retard']);
+      // Global seeds remain table (R20 only changes Space default)
+      expect(
+        taskViewRepo.insert.mock.calls.every((c) => c[0].type === 'table'),
+      ).toBe(true);
+      expect(views).toHaveLength(3);
+    });
+  });
+
+  describe('count mine-open', () => {
+    it('returns ACL-scoped count from repo', async () => {
+      taskItemRepo.countMineOpen.mockResolvedValue(3);
+      await expect(service.countMineOpen(user, workspaceId)).resolves.toEqual({
+        count: 3,
+        scope: 'mine-open',
+      });
+      expect(taskItemRepo.countMineOpen).toHaveBeenCalledWith(
+        userId,
+        workspaceId,
+      );
     });
   });
 });

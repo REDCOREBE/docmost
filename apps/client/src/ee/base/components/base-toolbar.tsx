@@ -27,6 +27,10 @@ import { ViewFilterConfigPopover } from "@/ee/base/components/views/view-filter-
 import { ViewPropertyVisibility } from "@/ee/base/components/views/view-property-visibility";
 import { KanbanGroupByPicker } from "@/ee/base/components/kanban/kanban-group-by-picker";
 import { KanbanCardProperties } from "@/ee/base/components/kanban/kanban-card-properties";
+import { GanttToolbarControls } from "@/ee/base/components/gantt/gantt-view";
+import { useUpdateViewMutation } from "@/ee/base/queries/base-view-query";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
+import type { GanttViewConfig } from "@/ee/base/types/base.types";
 import { useTranslation } from "react-i18next";
 import classes from "@/ee/base/styles/grid.module.css";
 import toolbarClasses from "@/ee/base/styles/base-toolbar.module.css";
@@ -61,6 +65,8 @@ export function BaseToolbar({
   getViewShareUrl,
 }: BaseToolbarProps) {
   const { t } = useTranslation();
+  const ports = useBaseDataPorts();
+  const updateView = useUpdateViewMutation();
   const [sortOpened, setSortOpened] = useState(false);
   const [filterOpened, setFilterOpened] = useState(false);
   const [propertiesOpened, setPropertiesOpened] = useState(false);
@@ -68,6 +74,27 @@ export function BaseToolbar({
   const [exporting, setExporting] = useState(false);
 
   const isKanban = activeView?.type === "kanban";
+  const isGantt = activeView?.type === "gantt";
+
+  const handleGanttConfigChange = useCallback(
+    (gantt: GanttViewConfig) => {
+      if (!activeView) return;
+      if (ports?.persistViewConfig) {
+        ports.persistViewConfig({
+          viewId: activeView.id,
+          pageId: base.id,
+          config: { gantt },
+        });
+        return;
+      }
+      updateView.mutate({
+        viewId: activeView.id,
+        pageId: base.id,
+        config: { gantt },
+      });
+    },
+    [activeView, ports, base.id, updateView],
+  );
 
   const handleExport = useCallback(async () => {
     if (exporting) return;
@@ -178,8 +205,9 @@ export function BaseToolbar({
           </Tooltip>
         </ViewFilterConfigPopover>
 
-        {isKanban && activeView && (
+        {(isKanban || isGantt) && activeView && (
           <>
+            {isKanban && (
             <KanbanGroupByPicker base={base} view={activeView} pageId={base.id}>
               <Tooltip label={t("Group by")}>
                 <ActionIcon
@@ -191,6 +219,7 @@ export function BaseToolbar({
                 </ActionIcon>
               </Tooltip>
             </KanbanGroupByPicker>
+            )}
 
             <KanbanCardProperties
               opened={cardPropertiesOpened}
@@ -199,7 +228,11 @@ export function BaseToolbar({
               view={activeView}
               pageId={base.id}
             >
-              <Tooltip label={t("Card properties")}>
+              <Tooltip
+                label={
+                  isGantt ? t("Visible properties") : t("Card properties")
+                }
+              >
                 <ActionIcon
                   variant="subtle"
                   size="sm"
@@ -211,6 +244,14 @@ export function BaseToolbar({
               </Tooltip>
             </KanbanCardProperties>
           </>
+        )}
+
+        {isGantt && activeView && (
+          <GanttToolbarControls
+            properties={base.properties}
+            gantt={activeView.config?.gantt}
+            onChange={handleGanttConfigChange}
+          />
         )}
 
         {!isKanban && (

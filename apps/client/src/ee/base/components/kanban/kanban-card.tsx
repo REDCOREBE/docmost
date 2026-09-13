@@ -5,6 +5,7 @@ import { IBase, IBaseRow, IBaseView } from "@/ee/base/types/base.types";
 import { CardField } from "@/ee/base/components/kanban/card-field/card-field";
 import { useKanbanCardDnd } from "@/ee/base/hooks/use-kanban-card-dnd";
 import { BaseDropEdgeIndicator } from "@/ee/base/components/grid/base-drop-edge-indicator";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import classes from "@/ee/base/styles/kanban.module.css";
 
 type KanbanCardProps = {
@@ -18,14 +19,21 @@ type KanbanCardProps = {
 export const KanbanCard = forwardRef<HTMLDivElement, KanbanCardProps>(
   function KanbanCard({ base, view, row, columnKey, onOpen }, ref) {
     const { t } = useTranslation();
+    const ports = useBaseDataPorts();
     const primary = base.properties.find((p) => p.isPrimary);
     const title = primary ? (row.cells[primary.id] as string | undefined) : undefined;
 
     const visibleIds = view.config?.visiblePropertyIds ?? [];
     const propertyOrder = view.config?.propertyOrder;
 
+    // Footer may already render some properties — avoid duplicate CardField rows.
+    const footerHandles = new Set(ports?.kanbanCardFooterPropertyIds ?? []);
+
     const cardProps = base.properties.filter(
-      (p) => visibleIds.includes(p.id) && !p.isPrimary,
+      (p) =>
+        visibleIds.includes(p.id) &&
+        !p.isPrimary &&
+        !footerHandles.has(p.id),
     );
 
     if (propertyOrder) {
@@ -78,6 +86,7 @@ export const KanbanCard = forwardRef<HTMLDivElement, KanbanCardProps>(
             pageId={base.id}
           />
         ))}
+        {ports?.renderKanbanCardFooter?.(row)}
         {closestEdge === "bottom" && <BaseDropEdgeIndicator edge="bottom" />}
       </div>
     );

@@ -186,6 +186,8 @@ export interface TaskItems {
   priority: Generated<string>;
   progress: Generated<number>;
   spaceId: string;
+  /** R21 Gantt — optional start (nullable). */
+  startDate: Timestamp | null;
   status: string;
   title: string;
   updatedAt: Generated<Timestamp>;

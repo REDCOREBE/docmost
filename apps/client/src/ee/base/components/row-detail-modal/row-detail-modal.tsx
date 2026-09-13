@@ -24,6 +24,7 @@ import {
 import { propertyMenuCloseRequestAtomFamily } from "@/ee/base/atoms/base-atoms";
 import { getDescriptor } from "@/ee/base/property-types/property-type.registry";
 import { useBaseEditable } from "@/ee/base/context/base-editable";
+import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import { useClipboard } from "@/hooks/use-clipboard";
 import { CreatePropertyPopover } from "@/ee/base/components/property/create-property-popover";
 import { RowDetailTitle } from "./row-detail-title";
@@ -47,6 +48,10 @@ export function RowDetailModal({
 }: RowDetailModalProps) {
   const { t } = useTranslation();
   const canEdit = useBaseEditable();
+  const ports = useBaseDataPorts();
+  // Match grid header: allow Add property when schema is open OR adapter supplies createProperty.
+  const canAddProperty =
+    canEdit && (!ports?.disableSchemaMutations || !!ports.createProperty);
   const updateRowMutation = useUpdateRowMutation();
   const deleteRowMutation = useDeleteRowMutation();
   const clipboard = useClipboard({ timeout: 500 });
@@ -331,7 +336,7 @@ export function RowDetailModal({
                   />
                 ))}
             </div>
-            {canEdit && (
+            {canAddProperty && (
               <CreatePropertyPopover
                 pageId={base.id}
                 properties={base.properties}

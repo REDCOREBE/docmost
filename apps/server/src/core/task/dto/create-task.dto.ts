@@ -43,6 +43,10 @@ export class CreateTaskDto {
 
   @IsOptional()
   @IsDateString()
+  startDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
   dueDate?: string | null;
 
   @IsOptional()

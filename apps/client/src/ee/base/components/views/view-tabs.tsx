@@ -21,6 +21,7 @@ import {
   IconTable,
   IconLink,
   IconLayoutKanban,
+  IconTimeline,
 } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
@@ -355,6 +356,8 @@ function ViewTab({
             <Group gap={6} wrap="nowrap">
               {view.type === "kanban" ? (
                 <IconLayoutKanban size={14} opacity={isActive ? 1 : 0.5} />
+              ) : view.type === "gantt" ? (
+                <IconTimeline size={14} opacity={isActive ? 1 : 0.5} />
               ) : (
                 <IconTable size={14} opacity={isActive ? 1 : 0.5} />
               )}

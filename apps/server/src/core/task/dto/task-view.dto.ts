@@ -27,8 +27,8 @@ export class CreateTaskViewDto {
   @MaxLength(120)
   name: string;
 
-  @IsIn(['table', 'kanban'])
-  type: 'table' | 'kanban';
+  @IsIn(['table', 'kanban', 'gantt'])
+  type: 'table' | 'kanban' | 'gantt';
 
   @IsOptional()
   @IsObject()
@@ -59,8 +59,8 @@ export class UpdateTaskViewDto {
   name?: string;
 
   @IsOptional()
-  @IsIn(['table', 'kanban'])
-  type?: 'table' | 'kanban';
+  @IsIn(['table', 'kanban', 'gantt'])
+  type?: 'table' | 'kanban' | 'gantt';
 
   @IsOptional()
   @IsObject()
