@@ -1329,5 +1329,13 @@
   "Save the task to add custom properties": "Enregistrez la tâche pour ajouter des propriétés personnalisées",
   "More": "Plus",
   "Linked page": "Page liée",
-  "Unknown user": "Utilisateur inconnu"
+  "Unknown user": "Utilisateur inconnu",
+  "Start date": "Date de début",
+  "Personne": "Personne",
+  "Espace": "Espace",
+  "Toutes les personnes": "Toutes les personnes",
+  "Tous les espaces": "Tous les espaces",
+  "Failed to create date properties": "Échec de la création des propriétés de date",
+  "You need edit permission to create date properties for Gantt.": "Vous devez pouvoir modifier le schéma pour créer les dates du Gantt.",
+  "Visible properties": "Propriétés visibles"
 }

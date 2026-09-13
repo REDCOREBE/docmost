@@ -111,7 +111,9 @@ export function KanbanCardProperties({
         <Stack gap={4}>
           <Group justify="space-between" px={4} py={2}>
             <Text size="xs" fw={600} c="dimmed">
-              {t("Card properties")}
+              {view.type === "gantt"
+                ? t("Visible properties")
+                : t("Card properties")}
             </Text>
           </Group>
           <ScrollArea.Autosize mah="min(60vh, 420px)" scrollbarSize={6} offsetScrollbars>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Badge, MultiSelect, Select, Text } from "@mantine/core";
+import { Badge, Select, Text } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 import type {
   GanttViewConfig,
@@ -12,16 +12,16 @@ import type {
 import { choiceColor } from "@/ee/base/components/cells/choice-color";
 import {
   buildHeaders,
-  computeTimelineRange,
   dayIndex,
   daysBetweenInclusive,
-  pxPerDay,
   resolveRowSpan,
   type GanttDatedRow,
 } from "./gantt-timeline";
+import { computeFilledTimeline } from "./gantt-scale";
 import {
   maxBarExtras,
   resolveBarExtras,
+  resolveEffectiveBarPropertyIds,
 } from "./gantt-bar-label";
 import classes from "./gantt.module.css";
 
@@ -65,6 +65,7 @@ function resolveTitle(row: IBaseRow, properties: IBaseProperty[]): string {
 function resolveProgress(
   row: IBaseRow,
   properties: IBaseProperty[],
+  enabledPropertyIds: string[],
 ): number | null {
   const progressProp = properties.find(
     (p) =>
@@ -72,6 +73,7 @@ function resolveProgress(
       (p.typeOptions as { format?: string } | undefined)?.format === "progress",
   );
   if (!progressProp) return null;
+  if (!enabledPropertyIds.includes(progressProp.id)) return null;
   const raw = row.cells?.[progressProp.id];
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n)) return null;
@@ -197,6 +199,7 @@ export function GanttView({
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [bodyMinHeight, setBodyMinHeight] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   const dateProperties = useMemo(
     () => properties.filter((p) => p.type === "date"),
@@ -224,6 +227,7 @@ export function GanttView({
   const showWeekends = gantt?.showWeekends ?? true;
   const barPropertyIds = gantt?.barPropertyIds ?? [];
   const visiblePropertyIds = viewConfig.visiblePropertyIds;
+  const propertyOrder = viewConfig.propertyOrder;
 
   const { dated, undatedCount } = useMemo(() => {
     if (!configured || !gantt)
@@ -242,17 +246,26 @@ export function GanttView({
     return { dated: next, undatedCount: missing };
   }, [rows, configured, gantt]);
 
-  const { rangeStart, dayCount, clamped } = useMemo(
-    () => computeTimelineRange(dated, zoom),
-    [dated, zoom],
+  const {
+    rangeStart,
+    dayCount,
+    effectivePxPerDay: dayWidth,
+    timelineWidth: totalWidth,
+    clamped,
+  } = useMemo(
+    () =>
+      computeFilledTimeline({
+        dated,
+        zoom,
+        containerWidthPx: containerWidth,
+      }),
+    [dated, zoom, containerWidth],
   );
   const { months, days } = useMemo(
     () => buildHeaders(rangeStart, dayCount, zoom),
     [rangeStart, dayCount, zoom],
   );
 
-  const dayWidth = pxPerDay(zoom);
-  const totalWidth = dayCount * dayWidth;
   const todayIdx = dayIndex(rangeStart, new Date());
   const todayVisible = todayIdx >= 0 && todayIdx < dayCount;
 
@@ -264,7 +277,7 @@ export function GanttView({
     enabled: configured && dated.length >= VIRTUALIZE_THRESHOLD,
   });
 
-  // Stretch timeline grid to fill the scroll viewport (no blank gap under last row).
+  // Measure viewport for full-height body + full-width scale.
   useEffect(() => {
     if (!configured) return;
     const el = scrollRef.current;
@@ -274,6 +287,7 @@ export function GanttView({
       const header = el.querySelector("[data-gantt-header]");
       const headerH = header?.getBoundingClientRect().height ?? 46;
       setBodyMinHeight(Math.max(0, el.clientHeight - headerH));
+      setContainerWidth(el.clientWidth);
     };
 
     measure();
@@ -302,7 +316,7 @@ export function GanttView({
   const bodyHeight = Math.max(contentHeight, bodyMinHeight);
 
   return (
-    <div className={classes.root} data-gantt-root data-gantt-zoom={zoom}>
+    <div className={classes.root} data-gantt-root data-gantt-ux="r24" data-gantt-zoom={zoom}>
       {(undatedCount > 0 || clamped) && (
         <div className={classes.metaBar}>
           {undatedCount > 0 && (
@@ -411,6 +425,7 @@ export function GanttView({
                       properties={properties}
                       barPropertyIds={barPropertyIds}
                       visiblePropertyIds={visiblePropertyIds}
+                      propertyOrder={propertyOrder}
                       onOpenRow={onOpenRow}
                     />
                   );
@@ -425,6 +440,7 @@ export function GanttView({
                     properties={properties}
                     barPropertyIds={barPropertyIds}
                     visiblePropertyIds={visiblePropertyIds}
+                    propertyOrder={propertyOrder}
                     onOpenRow={onOpenRow}
                   />
                 ))}
@@ -443,6 +459,7 @@ function GanttBarRow({
   properties,
   barPropertyIds,
   visiblePropertyIds,
+  propertyOrder,
   onOpenRow,
 }: {
   item: GanttDatedRow;
@@ -452,10 +469,17 @@ function GanttBarRow({
   properties: IBaseProperty[];
   barPropertyIds: string[];
   visiblePropertyIds?: string[];
+  propertyOrder?: string[];
   onOpenRow?: (rowId: string) => void;
 }) {
   const title = resolveTitle(item.row, properties);
-  const progress = resolveProgress(item.row, properties);
+  const enabledBarPropIds = resolveEffectiveBarPropertyIds({
+    properties,
+    visiblePropertyIds,
+    barPropertyIds,
+    propertyOrder,
+  });
+  const progress = resolveProgress(item.row, properties, enabledBarPropIds);
   const style = resolveBarStyle(item.row, properties);
 
   if (item.kind === "milestone") {
@@ -506,6 +530,7 @@ function GanttBarRow({
     barPropertyIds,
     visiblePropertyIds,
     maxBarExtras(barWidth),
+    propertyOrder,
   );
 
   return (
@@ -562,7 +587,7 @@ function GanttBarRow({
   );
 }
 
-/** Compact toolbar controls for Gantt (zoom + date props + bar fields). */
+/** Compact toolbar controls for Gantt (zoom + date props). Bar fields removed — Card properties drives bar metas. */
 export function GanttToolbarControls({
   properties,
   gantt,
@@ -575,14 +600,6 @@ export function GanttToolbarControls({
   const { t } = useTranslation();
   const dateProperties = properties.filter((p) => p.type === "date");
   if (!gantt) return null;
-
-  const barCandidates = properties.filter(
-    (p) =>
-      !p.isPrimary &&
-      p.type !== "file" &&
-      p.id !== gantt.startPropertyId &&
-      p.id !== gantt.endPropertyId,
-  );
 
   return (
     <>
@@ -627,19 +644,6 @@ export function GanttToolbarControls({
           onChange({ ...gantt, endPropertyId: v });
         }}
         allowDeselect={false}
-      />
-      <MultiSelect
-        size="xs"
-        w={168}
-        aria-label={t("Bar properties")}
-        placeholder={t("Bar fields")}
-        data={barCandidates.map((p) => ({ value: p.id, label: p.name }))}
-        value={gantt.barPropertyIds ?? []}
-        onChange={(ids) => onChange({ ...gantt, barPropertyIds: ids })}
-        searchable
-        clearable
-        maxValues={4}
-        hidePickedOptions
       />
     </>
   );

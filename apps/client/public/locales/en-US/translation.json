@@ -1329,5 +1329,13 @@
   "Save the task to add custom properties": "Save the task to add custom properties",
   "More": "More",
   "Linked page": "Linked page",
-  "Unknown user": "Unknown user"
+  "Unknown user": "Unknown user",
+  "Start date": "Start date",
+  "Personne": "Person",
+  "Espace": "Space",
+  "Toutes les personnes": "All people",
+  "Tous les espaces": "All spaces",
+  "Failed to create date properties": "Failed to create date properties",
+  "You need edit permission to create date properties for Gantt.": "You need edit permission to create date properties for Gantt.",
+  "Visible properties": "Visible properties"
 }

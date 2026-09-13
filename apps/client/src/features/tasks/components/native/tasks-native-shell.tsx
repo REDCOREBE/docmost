@@ -51,6 +51,11 @@ import { TasksNativeTable } from "./tasks-native-table";
 import { TasksNativeKanban } from "./tasks-native-kanban";
 import { TasksNativeGantt } from "./tasks-native-gantt";
 import { TasksKanbanCardFooter } from "./tasks-kanban-card-footer";
+import {
+  TasksQuickFiltersToolbar,
+  useTasksQuickFiltersFromUrl,
+} from "./tasks-quick-filters-toolbar";
+import { composeTaskDisplayFilter } from "./tasks-quick-filters";
 import { GanttToolbarControls } from "@/ee/base/components/gantt/gantt-view";
 import type { GanttViewConfig, IBaseRow } from "@/ee/base/types/base.types";
 import type { TaskItem, TaskProperty, TaskStatus } from "../../types/task.types";
@@ -65,6 +70,7 @@ import {
   mapTaskViewToBaseView,
   viewTypeFromBase,
 } from "../../adapter/tasks-native-ui-adapter";
+import { useGetSpacesQuery } from "@/features/space/queries/space-query";
 import {
   useCreateTaskMutation,
   useCreateTaskPropertyMutation,
@@ -118,7 +124,7 @@ export function TasksNativeShell({
   rows,
   tasks,
   customProperties,
-  isGlobal: _isGlobal,
+  isGlobal,
   canCreate,
   canManageProperties,
   propertySpaceId,
@@ -143,6 +149,17 @@ export function TasksNativeShell({
   >({});
   const [table, setTable] = useState<TanstackTable<IBaseRow> | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
+
+  const { data: spacesData } = useGetSpacesQuery({ limit: 100 });
+  const accessibleSpaces = useMemo(
+    () =>
+      isGlobal
+        ? (spacesData?.items ?? []).map((s) => ({ id: s.id, name: s.name }))
+        : [],
+    [isGlobal, spacesData],
+  );
+  const [quickFilters, setQuickFilters] =
+    useTasksQuickFiltersFromUrl(accessibleSpaces);
 
   const createTask = useCreateTaskMutation();
   const updateTask = useUpdateTaskMutation();
@@ -230,11 +247,21 @@ export function TasksNativeShell({
   }, [effectiveFilter]);
 
   const sorts = effectiveSorts ?? [];
+  /** Persisted/draft view filter only — never includes quick filters. */
   const viewFilter: FilterGroup | undefined = effectiveFilter;
 
+  /** Ephemeral Person/Space quick filters (Global Tasks). URL-backed; not dirty. */
+  const displayFilter = useMemo(
+    () =>
+      isGlobal
+        ? composeTaskDisplayFilter(viewFilter, quickFilters)
+        : viewFilter,
+    [isGlobal, viewFilter, quickFilters],
+  );
+
   const filteredRows = useMemo(
-    () => filterTaskRows(rows, base.id, viewFilter),
-    [rows, base.id, viewFilter],
+    () => filterTaskRows(rows, base.id, displayFilter),
+    [rows, base.id, displayFilter],
   );
 
   const hiddenPropertyCount = useMemo(() => {
@@ -576,6 +603,13 @@ export function TasksNativeShell({
           </Group>
 
           <div className={gridClasses.toolbarRight}>
+            {isGlobal && (
+              <TasksQuickFiltersToolbar
+                value={quickFilters}
+                onChange={setQuickFilters}
+              />
+            )}
+
             <ViewFilterConfigPopover
               opened={filterOpened}
               onClose={() => setFilterOpened(false)}

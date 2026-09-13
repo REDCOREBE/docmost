@@ -74,6 +74,8 @@ export function formatBarPropertyValue(
           ? [value]
           : [];
       if (ids.length === 0) return null;
+      // Compact: count when multi; single id abbreviated (names come from
+      // reference hydration in richer renderers — keep string-safe here).
       return ids.length === 1 ? "1" : String(ids.length);
     }
     case "checkbox":
@@ -87,8 +89,53 @@ export function formatBarPropertyValue(
 }
 
 /**
- * Resolve secondary bar labels from `barPropertyIds`, optionally gated by
- * `visiblePropertyIds` when that list is present on the view.
+ * Resolve which property ids drive Gantt bar extras.
+ *
+ * Priority (R24):
+ * 1. `visiblePropertyIds` when non-empty → Card properties is the sole UX control
+ * 2. Legacy `gantt.barPropertyIds` when visible list is empty/absent
+ * 3. Otherwise title-only
+ *
+ * Order follows `propertyOrder` when provided, else the source list order.
+ */
+export function resolveEffectiveBarPropertyIds(input: {
+  properties: IBaseProperty[];
+  visiblePropertyIds?: string[];
+  barPropertyIds?: string[];
+  propertyOrder?: string[];
+}): string[] {
+  const { properties, visiblePropertyIds, barPropertyIds, propertyOrder } =
+    input;
+  const primaryId = properties.find((p) => p.isPrimary)?.id;
+  const allowed = new Set(
+    properties
+      .filter((p) => !p.isPrimary && p.type !== "file")
+      .map((p) => p.id),
+  );
+
+  // `undefined` = never configured → legacy barPropertyIds fallback.
+  // `[]` = user explicitly hid all card properties → title-only.
+  const source =
+    visiblePropertyIds !== undefined
+      ? visiblePropertyIds
+      : barPropertyIds && barPropertyIds.length > 0
+        ? barPropertyIds
+        : [];
+
+  const filtered = source.filter((id) => allowed.has(id) && id !== primaryId);
+  if (!propertyOrder?.length) return filtered;
+
+  const rank = new Map(propertyOrder.map((id, i) => [id, i]));
+  return [...filtered].sort((a, b) => {
+    const ra = rank.has(a) ? rank.get(a)! : 9999;
+    const rb = rank.has(b) ? rank.get(b)! : 9999;
+    return ra - rb;
+  });
+}
+
+/**
+ * Resolve secondary bar labels from Card properties (visiblePropertyIds),
+ * with legacy barPropertyIds fallback for R22 configs.
  */
 export function resolveBarExtras(
   row: IBaseRow,
@@ -96,20 +143,22 @@ export function resolveBarExtras(
   barPropertyIds: string[] | undefined,
   visiblePropertyIds: string[] | undefined,
   maxExtras: number,
+  propertyOrder?: string[],
 ): string[] {
-  if (maxExtras <= 0 || !barPropertyIds?.length) return [];
+  if (maxExtras <= 0) return [];
+
+  const ids = resolveEffectiveBarPropertyIds({
+    properties,
+    visiblePropertyIds,
+    barPropertyIds,
+    propertyOrder,
+  });
+  if (!ids.length) return [];
 
   const byId = new Map(properties.map((p) => [p.id, p]));
-  const primaryId = properties.find((p) => p.isPrimary)?.id;
-  const gated =
-    visiblePropertyIds != null
-      ? barPropertyIds.filter((id) => visiblePropertyIds.includes(id))
-      : barPropertyIds;
-
   const out: string[] = [];
-  for (const id of gated) {
+  for (const id of ids) {
     if (out.length >= maxExtras) break;
-    if (id === primaryId) continue;
     const prop = byId.get(id);
     if (!prop) continue;
     const label = formatBarPropertyValue(prop, row);

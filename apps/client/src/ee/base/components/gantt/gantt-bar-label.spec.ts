@@ -3,6 +3,7 @@ import {
   formatBarPropertyValue,
   maxBarExtras,
   resolveBarExtras,
+  resolveEffectiveBarPropertyIds,
 } from "@/ee/base/components/gantt/gantt-bar-label";
 import type { IBaseProperty, IBaseRow } from "@/ee/base/types/base.types";
 
@@ -56,7 +57,7 @@ describe("gantt-bar-label", () => {
     );
   });
 
-  it("respects visiblePropertyIds gate", () => {
+  it("uses visiblePropertyIds as sole control when set", () => {
     const priority = prop({
       id: "prio",
       name: "Priority",
@@ -73,12 +74,31 @@ describe("gantt-bar-label", () => {
       resolveBarExtras(r, properties, ["prio", "space"], ["prio"], 2),
     ).toEqual(["High"]);
 
+    // undefined visible → legacy barPropertyIds
     expect(
       resolveBarExtras(r, properties, ["prio", "space"], undefined, 2),
     ).toEqual(["High", "Ops"]);
 
+    // explicit empty visible → title-only (ignore legacy)
     expect(
       resolveBarExtras(r, properties, ["prio", "space"], [], 2),
     ).toEqual([]);
+  });
+
+  it("orders by propertyOrder when provided", () => {
+    const a = prop({ id: "a", name: "A", type: "text" });
+    const b = prop({ id: "b", name: "B", type: "text" });
+    const properties = [a, b];
+    const r = row({ a: "A1", b: "B1" });
+    expect(
+      resolveEffectiveBarPropertyIds({
+        properties,
+        visiblePropertyIds: ["a", "b"],
+        propertyOrder: ["b", "a"],
+      }),
+    ).toEqual(["b", "a"]);
+    expect(
+      resolveBarExtras(r, properties, undefined, ["a", "b"], 2, ["b", "a"]),
+    ).toEqual(["B1", "A1"]);
   });
 });
