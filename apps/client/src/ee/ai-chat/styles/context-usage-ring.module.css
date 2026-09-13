@@ -1,0 +1,149 @@
+.ringButton {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-2));
+  flex-shrink: 0;
+
+  &:hover {
+    color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-0));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+}
+
+.ringSvg {
+  display: block;
+}
+
+.track {
+  fill: none;
+  stroke: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  stroke-width: 2;
+}
+
+.fill {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 240ms ease, stroke 180ms ease;
+}
+
+.fill[data-level="unknown"] {
+  stroke: transparent;
+}
+
+.fill[data-level="neutral"] {
+  stroke: light-dark(var(--mantine-color-gray-6), var(--mantine-color-gray-4));
+}
+
+.fill[data-level="attention"] {
+  stroke: light-dark(var(--mantine-color-yellow-6), var(--mantine-color-yellow-5));
+}
+
+.fill[data-level="high"] {
+  stroke: light-dark(var(--mantine-color-orange-6), var(--mantine-color-orange-5));
+}
+
+.popover {
+  width: 280px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.title {
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+  color: light-dark(var(--mantine-color-gray-8), var(--mantine-color-dark-0));
+}
+
+.percent {
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
+}
+
+.bar {
+  height: 4px;
+  border-radius: 99px;
+  background: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 99px;
+  background: light-dark(var(--mantine-color-gray-6), var(--mantine-color-gray-4));
+}
+
+.barFill[data-level="attention"] {
+  background: light-dark(var(--mantine-color-yellow-6), var(--mantine-color-yellow-5));
+}
+
+.barFill[data-level="high"] {
+  background: light-dark(var(--mantine-color-orange-6), var(--mantine-color-orange-5));
+}
+
+.used {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  margin-bottom: 10px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--mantine-font-size-xs);
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
+}
+
+.rowLabel {
+  color: var(--mantine-color-dimmed);
+}
+
+.note {
+  margin-top: 10px;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  line-height: 1.4;
+}
+
+.baseline {
+  font-size: var(--mantine-font-size-sm);
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
+}
+
+.baselineHint {
+  margin-top: 6px;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  line-height: 1.4;
+}

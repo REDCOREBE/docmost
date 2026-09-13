@@ -51,6 +51,7 @@ export default function AsideChatPanel() {
     sendMessage,
     stopGeneration,
     hydrateFromServer,
+    contextUsage,
   } = useChatStream(chatId, {
     onChatCreated: (newChatId) => {
       setChatId(newChatId);
@@ -288,6 +289,7 @@ export default function AsideChatPanel() {
           onRemoveContextPage={handleRemoveContextPage}
           variant="flat"
           chatId={chatId}
+          contextUsage={contextUsage}
         />
       </div>
     </div>

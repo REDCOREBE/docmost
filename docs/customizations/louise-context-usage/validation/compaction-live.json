@@ -1,0 +1,178 @@
+{
+  "ok": true,
+  "chatId": "01a09bcd-2ea1-7e6f-ad74-19338cc6f0ea",
+  "before": {
+    "ok": true,
+    "contextUsage": {
+      "source": "server-estimate",
+      "compacted": false,
+      "toolsTokens": 5500,
+      "contextLimit": 65536,
+      "historyTokens": 30759,
+      "messagesAfter": 41,
+      "messagesBefore": 41,
+      "toolResultsAfter": 0,
+      "toolResultsBefore": 0,
+      "systemPromptTokens": 3613,
+      "estimatedUsedTokens": 39872
+    },
+    "percent": 61,
+    "sumMatchesUsed": true,
+    "providerUsage": null
+  },
+  "after": {
+    "ok": true,
+    "contextUsage": {
+      "source": "server-estimate",
+      "compacted": true,
+      "toolsTokens": 5500,
+      "contextLimit": 65536,
+      "historyTokens": 161,
+      "messagesAfter": 2,
+      "messagesBefore": 83,
+      "toolResultsAfter": 0,
+      "toolResultsBefore": 0,
+      "systemPromptTokens": 3613,
+      "estimatedUsedTokens": 9274
+    },
+    "percent": 14,
+    "sumMatchesUsed": true,
+    "providerUsage": null,
+    "estimatedUsedTokens": 9274
+  },
+  "beforeSeed": null,
+  "overflowSeed": null,
+  "percentBefore": 61,
+  "percentAfter": 14,
+  "usedBefore": 39872,
+  "usedAfter": 9274,
+  "historyBefore": 30759,
+  "historyAfter": 161,
+  "memoryBefore": null,
+  "memoryAfter": null,
+  "compactedBefore": false,
+  "compactedAfter": true,
+  "messagesBeforeAfter": {
+    "before": [
+      41,
+      41
+    ],
+    "after": [
+      83,
+      2
+    ]
+  },
+  "sumMatchesUsedBefore": true,
+  "sumMatchesUsedAfter": true,
+  "usageDistinct": true,
+  "privacyLeak": false,
+  "visualFixtures": [
+    {
+      "chatId": "01a09bcf-5832-7102-8e49-963cd416b6b7",
+      "title": "[visual fixture] context ~25%",
+      "contextUsage": {
+        "estimatedUsedTokens": 16384,
+        "contextLimit": 65536,
+        "systemPromptTokens": 3613,
+        "toolsTokens": 5500,
+        "historyTokens": 7271,
+        "compacted": false,
+        "messagesBefore": 8,
+        "messagesAfter": 8,
+        "toolResultsBefore": 0,
+        "toolResultsAfter": 0,
+        "source": "server-estimate"
+      }
+    },
+    {
+      "chatId": "01a09bcf-5952-71df-be31-59eca34d4051",
+      "title": "[visual fixture] context ~65%",
+      "contextUsage": {
+        "estimatedUsedTokens": 42598,
+        "contextLimit": 65536,
+        "systemPromptTokens": 3613,
+        "toolsTokens": 5500,
+        "historyTokens": 33485,
+        "compacted": false,
+        "messagesBefore": 8,
+        "messagesAfter": 8,
+        "toolResultsBefore": 0,
+        "toolResultsAfter": 0,
+        "source": "server-estimate"
+      }
+    },
+    {
+      "chatId": "01a09bcf-5a75-7e10-900f-8e304cac4e30",
+      "title": "[visual fixture] context ~85%",
+      "contextUsage": {
+        "estimatedUsedTokens": 55705,
+        "contextLimit": 65536,
+        "systemPromptTokens": 3613,
+        "toolsTokens": 5500,
+        "historyTokens": 45792,
+        "compacted": true,
+        "messagesBefore": 40,
+        "messagesAfter": 12,
+        "toolResultsBefore": 0,
+        "toolResultsAfter": 0,
+        "source": "server-estimate",
+        "internalMemoryTokens": 800
+      }
+    }
+  ],
+  "page": {
+    "id": "01a09bcf-5d26-78c9-9e49-0fec08fcc462",
+    "slugId": "6m9QJWbiHv",
+    "raw": {
+      "ok": true,
+      "page": {
+        "id": "01a09bcf-5d26-78c9-9e49-0fec08fcc462",
+        "slugId": "6m9QJWbiHv",
+        "title": "Louise context-usage smoke page",
+        "icon": null,
+        "coverPhoto": null,
+        "position": "a02bk",
+        "parentPageId": null,
+        "creatorId": "01a09bba-95f4-77db-bc86-f9a56160e505",
+        "lastUpdatedById": "01a09bba-95f4-77db-bc86-f9a56160e505",
+        "spaceId": "01a09bba-96f0-7c21-880c-631e2eb00a4b",
+        "workspaceId": "01a09bba-9674-7758-a319-8dc8ba5dfdce",
+        "isLocked": false,
+        "isBase": false,
+        "createdAt": "2026-09-13T17:27:33.414Z",
+        "updatedAt": "2026-09-13T17:27:33.414Z",
+        "deletedAt": null,
+        "contributorIds": [],
+        "permissions": {
+          "canEdit": true,
+          "hasRestriction": false
+        }
+      }
+    }
+  },
+  "reloadInfo": {
+    "ok": true,
+    "chatId": "01a09bcd-2ea1-7e6f-ad74-19338cc6f0ea",
+    "messageCount": 85,
+    "contextUsage": {
+      "source": "server-estimate",
+      "compacted": true,
+      "toolsTokens": 5500,
+      "contextLimit": 65536,
+      "historyTokens": 161,
+      "messagesAfter": 2,
+      "messagesBefore": 83,
+      "toolResultsAfter": 0,
+      "toolResultsBefore": 0,
+      "systemPromptTokens": 3613,
+      "estimatedUsedTokens": 9274
+    },
+    "metadataKeys": [
+      "model",
+      "tokenCount",
+      "tokenUsage",
+      "contextUsage"
+    ],
+    "bannedLeak": false
+  }
+}

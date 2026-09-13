@@ -12,7 +12,9 @@ import EmojiCommand from "@/features/editor/extensions/emoji-command";
 import mentionRenderItems from "@/features/editor/components/mention/mention-suggestion";
 import MentionView from "@/features/editor/components/mention/mention-view";
 import { uploadChatFile } from "../services/ai-chat-service";
-import type { ChatAttachment, PageMention } from "../types/ai-chat.types";
+import type { AiContextUsage, ChatAttachment, PageMention } from "../types/ai-chat.types";
+import { useContextUsage } from "../hooks/use-context-usage";
+import ContextUsageRing from "./context-usage-ring";
 import classes from "../styles/chat-input.module.css";
 
 type PendingAttachment = ChatAttachment & { uploading: boolean };
@@ -33,6 +35,7 @@ type Props = {
   variant?: "card" | "flat";
   showDisclaimer?: boolean;
   chatId?: string;
+  contextUsage?: AiContextUsage | null;
 };
 
 function extractMentions(json: any): PageMention[] {
@@ -100,6 +103,7 @@ export default function ChatInput({
   variant = "card",
   showDisclaimer = true,
   chatId,
+  contextUsage = null,
 }: Props) {
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
@@ -269,6 +273,7 @@ export default function ChatInput({
     }
   }, [editor]);
 
+  const contextUsageView = useContextUsage([], contextUsage);
   const hasContent = !isEmpty || pendingAttachments.some((a) => !a.uploading) || (contextPages?.length ?? 0) > 0;
 
   const wrapperClass = variant === "flat" ? classes.inputWrapperFlat : classes.inputWrapper;
@@ -398,6 +403,8 @@ export default function ChatInput({
         </Popover>
 
         <div style={{ flex: 1 }} />
+
+        <ContextUsageRing view={contextUsageView} isStreaming={isStreaming} />
 
         {isStreaming ? (
           <button

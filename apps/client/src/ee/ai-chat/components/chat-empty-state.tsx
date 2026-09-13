@@ -7,7 +7,7 @@ import {
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import ChatInput from "./chat-input";
-import type { ChatAttachment, PageMention } from "../types/ai-chat.types";
+import type { AiContextUsage, ChatAttachment, PageMention } from "../types/ai-chat.types";
 import classes from "../styles/ai-chat.module.css";
 
 type Suggestion = {
@@ -43,9 +43,10 @@ type Props = {
   isStreaming: boolean;
   onSend: (content: string, mentions: PageMention[], attachments: ChatAttachment[]) => void;
   onStop: () => void;
+  contextUsage?: AiContextUsage | null;
 };
 
-export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
+export default function ChatEmptyState({ isStreaming, onSend, onStop, contextUsage }: Props) {
   const { t } = useTranslation();
 
   const handleSuggestionClick = (prompt: string) => {
@@ -67,6 +68,7 @@ export default function ChatEmptyState({ isStreaming, onSend, onStop }: Props) {
           onStop={onStop}
           placeholder={t("Ask anything... Use @ to mention pages")}
           autofocus
+          contextUsage={contextUsage}
         />
       </div>
 

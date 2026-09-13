@@ -31,6 +31,7 @@ export default function AiChatLayout() {
     sendMessage,
     stopGeneration,
     hydrateFromServer,
+    contextUsage,
   } = useChatStream(chatId);
 
   const autoSentRef = useRef(false);
@@ -90,6 +91,7 @@ export default function AiChatLayout() {
               onSend={sendMessage}
               onStop={stopGeneration}
               chatId={chatId}
+              contextUsage={contextUsage}
             />
           </div>
         </>
@@ -98,6 +100,7 @@ export default function AiChatLayout() {
           isStreaming={isStreaming}
           onSend={sendMessage}
           onStop={stopGeneration}
+          contextUsage={contextUsage}
         />
       )}
     </div>

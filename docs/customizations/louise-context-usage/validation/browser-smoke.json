@@ -1,0 +1,349 @@
+{
+  "ok": true,
+  "steps": {
+    "empty_before": {
+      "state": {
+        "aria": "Context available after the first message",
+        "level": "unknown",
+        "known": "false",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1119,
+          "sendLabel": "Send message",
+          "sendLeft": 1129
+        },
+        "tag": "button"
+      },
+      "popover": "Base context loaded\nDetails will be available after the first message.",
+      "noFakePercent": true,
+      "baselineText": true
+    },
+    "empty_after": {
+      "state": {
+        "aria": "Context ~14%",
+        "level": "neutral",
+        "known": "true",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1249,
+          "sendLabel": "Send message",
+          "sendLeft": 1259
+        },
+        "tag": "button"
+      },
+      "popover": "Context\n~14%\n9,122 / 65,536 tokens\nSystem prompt\n~3,613\nTools\n~5,500\nHistory\n~9\nHistory compacted\nNo\nMessages\n1 \u2192 1",
+      "url": "http://127.0.0.1:3000/ai/chat/01a09bd4-f43a-7ffc-8760-657f51a283f1"
+    },
+    "empty_chat_id": "01a09bd4-f43a-7ffc-8760-657f51a283f1",
+    "page": {
+      "hydrated": {
+        "aria": "Context ~14%",
+        "level": "neutral",
+        "known": "true",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1249,
+          "sendLabel": "Send message",
+          "sendLeft": 1259
+        },
+        "tag": "button"
+      },
+      "hydratedPopover": "Context\n~14%\n9,157 / 65,536 tokens\nSystem prompt\n~3,613\nTools\n~5,500\nHistory\n~44\nHistory compacted\nNo\nMessages\n5 \u2192 5",
+      "after": {
+        "aria": "Context ~14%",
+        "level": "neutral",
+        "known": "true",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1249,
+          "sendLabel": "Send message",
+          "sendLeft": 1259
+        },
+        "tag": "button"
+      },
+      "afterPopover": "Context\n~14%\n9,172 / 65,536 tokens\nSystem prompt\n~3,613\nTools\n~5,500\nHistory\n~59\nHistory compacted\nNo\nMessages\n7 \u2192 7",
+      "keyboardOpen": true,
+      "escapeCloses": false,
+      "providerUsageShown": false
+    },
+    "enter_in_editor": {
+      "popoverWasClosed": false,
+      "popoverStillClosed": true,
+      "startedStreamOrSend": true
+    },
+    "reload": {
+      "before": "Context ~14%",
+      "after": "Context ~14%",
+      "known": true,
+      "sameAria": true
+    },
+    "switch": {
+      "other": {
+        "aria": "Context ~14%",
+        "level": "neutral",
+        "known": "true",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1249,
+          "sendLabel": "Send message",
+          "sendLeft": 1259
+        },
+        "tag": "button"
+      },
+      "back": {
+        "aria": "Context ~14%",
+        "level": "neutral",
+        "known": "true",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1249,
+          "sendLabel": "Send message",
+          "sendLeft": 1259
+        },
+        "tag": "button"
+      },
+      "backKnown": true
+    },
+    "compaction": {
+      "state": {
+        "aria": "Context ~14%",
+        "level": "neutral",
+        "known": "true",
+        "compacted": "true",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1249,
+          "sendLabel": "Send message",
+          "sendLeft": 1259
+        },
+        "tag": "button"
+      },
+      "popover": "Context\n~14%\n9,274 / 65,536 tokens\nSystem prompt\n~3,613\nTools\n~5,500\nHistory\n~161\nHistory compacted\nYes\nMessages\n83 \u2192 2\nHistory was compacted to free space. Context can decrease after compaction.",
+      "compactedYes": true,
+      "note": true
+    },
+    "threshold_25": {
+      "state": {
+        "aria": "Context ~25%",
+        "level": "neutral",
+        "known": "true",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1249,
+          "sendLabel": "Send message",
+          "sendLeft": 1259
+        },
+        "tag": "button"
+      },
+      "popover": "Context\n~25%\n16,384 / 65,536 tokens\nSystem prompt\n~3,613\nTools\n~5,500\nHistory\n~7,271\nHistory compacted\nNo\nMessages\n8 \u2192 8"
+    },
+    "threshold_65": {
+      "state": {
+        "aria": "Context ~65%",
+        "level": "attention",
+        "known": "true",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1249,
+          "sendLabel": "Send message",
+          "sendLeft": 1259
+        },
+        "tag": "button"
+      },
+      "popover": "Context\n~65%\n42,598 / 65,536 tokens\nSystem prompt\n~3,613\nTools\n~5,500\nHistory\n~33,485\nHistory compacted\nNo\nMessages\n8 \u2192 8"
+    },
+    "threshold_85": {
+      "state": {
+        "aria": "Context ~85%",
+        "level": "high",
+        "known": "true",
+        "compacted": "true",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1249,
+          "sendLabel": "Send message",
+          "sendLeft": 1259
+        },
+        "tag": "button"
+      },
+      "popover": "Context\n~85%\n55,705 / 65,536 tokens\nSystem prompt\n~3,613\nTools\n~5,500\nHistory\n~45,792\nInternal memory\n~800\nHistory compacted\nYes\nMessages\n40 \u2192 12\nHistory was compacted to free space. Context can decrease after compaction."
+    },
+    "dark_page": {
+      "aria": "Context ~14%",
+      "level": "neutral",
+      "known": "true",
+      "compacted": "false",
+      "busy": null,
+      "size": {
+        "h": 20,
+        "w": 20
+      },
+      "send": {
+        "gap": 10,
+        "ringLeftOfSend": true,
+        "ringRight": 1249,
+        "sendLabel": "Send message",
+        "sendLeft": 1259
+      },
+      "tag": "button"
+    },
+    "dark_empty": {
+      "aria": "Context available after the first message",
+      "level": "unknown",
+      "known": "false",
+      "compacted": "false",
+      "busy": null,
+      "size": {
+        "h": 20,
+        "w": 20
+      },
+      "send": {
+        "gap": 10,
+        "ringLeftOfSend": true,
+        "ringRight": 1119,
+        "sendLabel": "Send message",
+        "sendLeft": 1129
+      },
+      "tag": "button"
+    },
+    "aside": {
+      "state": {
+        "aria": "Context available after the first message",
+        "level": "unknown",
+        "known": "false",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1182,
+          "sendLabel": "Send message",
+          "sendLeft": 1192
+        },
+        "tag": "button"
+      },
+      "popover": "Base context loaded\nDetails will be available after the first message.",
+      "overflow": {
+        "clientWidth": 284,
+        "overflowX": false,
+        "scrollWidth": 284,
+        "viewportOverflow": false
+      },
+      "spaceOpens": true,
+      "ringLeftOfSend": true,
+      "afterSend": {
+        "aria": "Context ~14%",
+        "level": "neutral",
+        "known": "true",
+        "compacted": "false",
+        "busy": null,
+        "size": {
+          "h": 20,
+          "w": 20
+        },
+        "send": {
+          "gap": 10,
+          "ringLeftOfSend": true,
+          "ringRight": 1182,
+          "sendLabel": "Send message",
+          "sendLeft": 1192
+        },
+        "tag": "button"
+      }
+    },
+    "aside_dark": {
+      "aria": "Context available after the first message",
+      "level": "unknown",
+      "known": "false",
+      "compacted": "false",
+      "busy": null,
+      "size": {
+        "h": 20,
+        "w": 20
+      },
+      "send": {
+        "gap": 10,
+        "ringLeftOfSend": true,
+        "ringRight": 1182,
+        "sendLabel": "Send message",
+        "sendLeft": 1192
+      },
+      "tag": "button"
+    }
+  },
+  "errors": [],
+  "console": [],
+  "fails": []
+}

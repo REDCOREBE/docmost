@@ -4,13 +4,16 @@ import { useNavigate } from "react-router-dom";
 import { REDCORE_AICHAT_V38_CLIENT_NATIVE } from "../constants/redcore-aichat-v38";
 import { REDCORE_AICHAT_V39_CLIENT_NATIVE } from "../constants/redcore-aichat-v39";
 import { sendChatMessage } from "../services/ai-chat-service";
+import { REDCORE_AICHAT_CONTEXT_USAGE_CLIENT_NATIVE } from "../constants/redcore-aichat-context-usage";
 import type {
   AiChatMessage,
   AiChatStreamEvent,
   AiChatToolCall,
+  AiContextUsage,
   ChatAttachment,
   PageMention,
 } from "../types/ai-chat.types";
+import { findLatestContextUsage, isAiContextUsage } from "../utils/context-usage";
 
 type ChatStreamOptions = {
   onChatCreated?: (chatId: string) => void;
@@ -30,6 +33,8 @@ export type SendMessageContext =
   REDCORE_AICHAT_V38_CLIENT_NATIVE;
 (globalThis as Record<string, unknown>)[REDCORE_AICHAT_V39_CLIENT_NATIVE] =
   REDCORE_AICHAT_V39_CLIENT_NATIVE;
+(globalThis as Record<string, unknown>)[REDCORE_AICHAT_CONTEXT_USAGE_CLIENT_NATIVE] =
+  REDCORE_AICHAT_CONTEXT_USAGE_CLIENT_NATIVE;
 
 export function useChatStream(
   chatId: string | undefined,
@@ -44,6 +49,7 @@ export function useChatStream(
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [isRetryable, setIsRetryable] = useState(false);
+  const [contextUsage, setContextUsage] = useState<AiContextUsage | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -65,6 +71,7 @@ export function useChatStream(
     setError(null);
     setErrorCode(null);
     setIsRetryable(false);
+    setContextUsage(null);
   }, [chatId]);
 
   const hydrateFromServer = useCallback((msgs: AiChatMessage[]) => {
@@ -73,6 +80,7 @@ export function useChatStream(
     if (hydratedChatIdRef.current === forId) return;
     hydratedChatIdRef.current = forId;
     setMessages(msgs);
+    setContextUsage(findLatestContextUsage(msgs));
   }, []);
 
   const sendMessage = useCallback(
@@ -192,7 +200,12 @@ export function useChatStream(
                     toolCalls: currentToolCalls.length
                       ? currentToolCalls
                       : null,
-                    metadata: event.usage ? { tokenUsage: event.usage } : null,
+                    metadata: {
+                      ...(event.usage ? { tokenUsage: event.usage } : {}),
+                      ...(event.contextUsage && isAiContextUsage(event.contextUsage)
+                        ? { contextUsage: event.contextUsage }
+                        : {}),
+                    },
                     createdAt: new Date().toISOString(),
                   };
 
@@ -201,6 +214,9 @@ export function useChatStream(
                 });
                 return "";
               });
+              if (event.contextUsage && isAiContextUsage(event.contextUsage)) {
+                setContextUsage(event.contextUsage);
+              }
               setIsStreaming(false);
               queryClient.invalidateQueries({
                 queryKey: ["ai-chat", currentChatIdRef.current],
@@ -263,6 +279,7 @@ export function useChatStream(
     error,
     errorCode,
     isRetryable,
+    contextUsage,
     sendMessage,
     stopGeneration,
     hydrateFromServer,
