@@ -1,6 +1,6 @@
 # Validation — Louise context usage V1
 
-**Ce projet est indépendant du projet Gantt/Tasks. Prod non déployée.**
+**Ce projet est indépendant du projet Gantt/Tasks. Prod R25 déployée 2026-09-13 (KEEP R25).**
 
 | | |
 |---|---|
@@ -74,6 +74,76 @@ SSE, metadata DB, popover, JSON client : compteurs seulement. `INTERNAL PRIOR AC
 
 `estimatedUsedTokens` **n’inclut pas** la réserve de réponse. `contextLimit = 65536`.
 
-## Verdict
+## Verdict smoke (pré-cutover)
 
-Voir le rapport de clôture dans le chat / `VALIDATION` finale. **SAFE FOR PROD** uniquement après cutover dédié — cette run ne déploie pas.
+**SAFE FOR PROD YES** — cutover dédié Projet B exécuté ci-dessous.
+
+## Production cutover R25 — 2026-09-13
+
+| | |
+|---|---|
+| RESULT | **PRODUCTION PASS WITH WARNINGS** |
+| Recommendation | **KEEP R25** |
+| Cutover timestamp | `2026-09-13T17:47:21Z` |
+| Command | `docker compose up -d --no-deps docmost` (PostgreSQL / Redis / cloudflared **non** recréés) |
+| Old image | `redcore-docmost-c2:0.95.0-r24-gantt-ux-test` |
+| Old digest | `sha256:4d3badc239478f641993f2c52950d4ab8d0eb099ce1b70a31a193c4ca1e4250a` |
+| New image | `redcore-docmost-c2:0.95.0-r25-louise-context-usage-final` |
+| New digest | `sha256:9f6e2d1145424aec7a66164cdb790dcbe5631b36ef511b17eacccddf4b8fa255` |
+| Client commit | `a527bd32dca41fe1e1600d6f40daefb93a8fb12a` |
+| Ops commit (patch+docs) | `a311af49cc72efdbf5ec0a29c7831aec83836057` |
+| Prod tag (Projet B) | `docmost-r25-louise-context-usage-prod` → client `a527bd32` |
+| Projet A tag | `docmost-r24-gantt-ux-prod` **inchangé** |
+| Rollback | **non utilisé** (artefacts `/root/backup-docmost-compose-pre-r25-louise-20260913-174628.yml`) |
+| Patch order | `onepassword-redact` **puis** `patch-aichat-context-usage.js` **puis** entitlements / logo |
+| Patch runtime | `AI chat context usage V1 patch applied to ai-chat.service` — skip-if-present, hard-fail anchors, RestartCount=0 |
+| Migrations | `No pending database migrations` |
+
+Compose diff strictement limité à : image R24→R25 + volume/commande du patch Louise. Pas de changement DB / Redis / Cloudflare / réseau / volumes inattendus / patch Gantt.
+
+### Monitoring 30 min
+
+15 cycles / 2 min (`2026-09-13T17:49:04Z` → `2026-09-13T18:17:25Z`). GET `/` `/login` `/tasks` `/ai/chat` : **HTTP 200**, 0 failure, 0 5xx monitor, RestartCount=0, OOM=false, Redis PONG, DB accepting, cloudflared active, 0 Error 1033 persistant.
+
+CPU ~0.4 %, RAM ~471 MiB / 3.8 GiB en fin de fenêtre.
+
+### SSE / metadata prod (compteurs seulement)
+
+Après cutover : **21/21** messages assistant ont `model` + `tokenCount` + `tokenUsage` + `contextUsage`. 0 fuite `INTERNAL PRIOR ACTIVITY MEMORY` / system prompt dans metadata.
+
+Exemples (pas de contenu message) :
+
+- early chat : `estimatedUsedTokens=9122`, `contextLimit=65536`, `compacted=false`, `source=server-estimate`
+- conversation plus longue : `used=14232`, `compacted=true`, `systemPromptTokens=3617`, `toolsTokens=5500`, `historyTokens=4888`, `internalMemoryTokens=227` (compteur seul)
+
+`done.usage` (provider) reste distinct de `done.contextUsage`. `contextLimit` toujours 65536. Jauge = server-estimate, pas le usage provider.
+
+### Compaction prod
+
+**17** snapshots `compacted=true`, **4** `false` (trafic organique). Pas de seed artificiel. UI : note « History compacted » déjà validée en smoke.
+
+### Cloudflare
+
+Reset origin bref pendant recreate (~17:47:36–17:47:49Z), classe R24. Tunnel `active` ensuite. Public `https://docs.red-cloud.be/` = 403 challenge Cloudflare (pas 1033).
+
+### Warnings (non bloquants)
+
+1. **UI logged-in non cliquée en prod** : SSO, pas de reset mot de passe. Bundle prod contient `data-context-usage-ring`, `REDCORE_AICHAT_CONTEXT_USAGE_CLIENT_NATIVE`, `Base context loaded`. Click-through page / empty / aside / a11y / Gantt Quick Person validés en **smoke** + nsenter, pas en session SSO prod.
+2. **Escape** : handler `closeOnEscape` présent en source git ; **absent du bundle image gelée** r25 (flaky headless déjà noté).
+3. **3 × `AI stream error part`** `18:12:03`–`18:13:49Z` : erreur connexion LiteLLM amont (`OpenAIException - Connection error`, model group `redcore-general`). Nested HTTP 500 LiteLLM, pas un crash Nest/patch. **21** `agent loop finished` dans la même fenêtre. Rollback R25 n’aurait pas corrigé LiteLLM. Seuil « ≥3 5xx AI / 5 min » interprété comme incident **upstream**, pas comme cassage streaming R25.
+4. **Collation PG** warning préexistant (2.41 vs 2.36) — non touché.
+5. Nest log d’erreur AI SDK peut inclure `requestBodyValues` (prompt/outils) sur stream fail — **préexistant**, hors snapshot `contextUsage`.
+
+### Gantt / Projet A
+
+0 modification fonctionnelle. Overlay `barPropertyIds` toujours dans le même bundle client. `/tasks` SPA 200. Tables `task_*` non touchées. Smoke R24 Gantt laissé intact (conteneurs smoke séparés).
+
+### Git push
+
+```
+CLIENT_BRANCH_PUSHED=yes   feature/louise-context-usage-r25
+OPS_BRANCH_PUSHED=yes      feature/louise-context-usage-r25
+PROD_TAG_PUSHED=yes        docmost-r25-louise-context-usage-prod
+```
+
+Pas de merge `main`. Tag Gantt `docmost-r24-gantt-ux-prod` non déplacé.
