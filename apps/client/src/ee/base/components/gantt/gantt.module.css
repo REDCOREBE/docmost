@@ -189,9 +189,26 @@
   transition: box-shadow 80ms ease, filter 80ms ease;
 }
 
+.bar.editable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.bar.dragging {
+  cursor: grabbing;
+  opacity: 0.88;
+  filter: brightness(1.02);
+  box-shadow: 0 0 0 1px light-dark(var(--mantine-color-blue-4), var(--mantine-color-blue-6));
+  z-index: 4;
+}
+
 .bar:hover {
   filter: brightness(0.97);
   box-shadow: 0 0 0 1px light-dark(var(--mantine-color-blue-3), var(--mantine-color-blue-7));
+}
+
+.bar.editable:hover .resizeHandle {
+  opacity: 1;
 }
 
 .bar:focus-visible {
@@ -276,6 +293,59 @@
   cursor: pointer;
   pointer-events: auto;
   transition: box-shadow 80ms ease, filter 80ms ease;
+}
+
+.milestone.editable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.milestone.dragging {
+  cursor: grabbing;
+  opacity: 0.9;
+  box-shadow: 0 0 0 1px light-dark(var(--mantine-color-blue-4), var(--mantine-color-blue-6));
+}
+
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  z-index: 3;
+  cursor: ew-resize;
+  opacity: 0;
+  transition: opacity 80ms ease;
+  touch-action: none;
+}
+
+.resizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 1px;
+  width: 2px;
+  border-radius: 1px;
+  background: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-7) 35%, transparent),
+    color-mix(in srgb, var(--mantine-color-gray-2) 40%, transparent)
+  );
+}
+
+.resizeHandleRight {
+  left: auto;
+  right: 0;
+}
+
+.resizeHandleRight::after {
+  left: auto;
+  right: 1px;
+}
+
+.bar:focus-visible .resizeHandle,
+.resizeHandle:focus-visible {
+  opacity: 1;
 }
 
 .milestone:hover {

@@ -48,7 +48,7 @@ Rules:
 ## Functional freeze
 
 After tag `docmost-r24-gantt-ux-prod`, do not land functional R24 changes on the prod baseline without a new release (R25+).  
-Next functional Gantt edit track is **R23 rebased on R24** ([R23-REBASE-PLAN.md](./R23-REBASE-PLAN.md)).
+Next functional Gantt edit track is **R26** (`feature/tasks-r23-gantt-edit-rebased`) — R23 interactions on the R24 UX baseline ([R23-REBASE-PLAN.md](./R23-REBASE-PLAN.md)). **Not production.** A future R26 prod image must compose Louise R25 without merging Projet B into this branch.
 
 ## Project separation
 

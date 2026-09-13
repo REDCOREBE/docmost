@@ -1,0 +1,379 @@
+# C2 hybrid r26 — Gantt Edit Rebased (R24 UX + R23 pointer edit) (surgical Tasks overlay + Hub EE patch)
+# Rebuild OSS client + editor-ext + server Task artefacts from fork;
+# keep Hub server/ee intact. NEVER replace /app/apps/server/dist/ee.
+#
+# Extends r15 with:
+#   - migration 20260913T120000-task-gantt-v1 (start_date + task_views gantt)
+#   - Hub EE BASE_VIEW_TYPES += gantt (runtime patch; Hub dist stays)
+#   - native GanttView client
+#
+# Build (context = merged fork tip, e.g. /opt/src/docmost):
+#   docker build -f /opt/docmost/docs/customizations/docs/custom/gantt/Dockerfile.c2-hybrid.r26.example \
+#     -t redcore-docmost-c2:0.95.0-r26-gantt-edit-rebased-test --network=host .
+
+FROM docmost/docmost@sha256:41c8d777cf23c74e78f94e676aec328b7d7856f48df5e573543dac68d371e37c AS oss-builder
+
+USER root
+WORKDIR /src
+
+COPY . .
+
+# Full install needed for workspace build (devDeps: vite, tsc, nest, …)
+RUN pnpm install --frozen-lockfile
+
+# Client/editor-ext + server nest build for Task overlay artefacts only.
+RUN pnpm --filter @docmost/base-formula build \
+ && pnpm --filter @docmost/editor-ext build \
+ && node packages/editor-ext/test/onepassword-smart-links.test.cjs \
+ && node packages/editor-ext/test/onepassword-slash-menu.test.cjs \
+ && node packages/editor-ext/test/onepassword-link-atom.test.cjs \
+ && pnpm --filter client build \
+ && pnpm --filter ./apps/server build
+
+RUN sh -c '\
+fail=0; \
+check() { desc="$1"; shift; if "$@"; then echo "OK $desc"; else echo "FAIL $desc"; fail=1; fi; }; \
+check index.html test -f /src/apps/client/dist/index.html; \
+check gantt-r24-markers node -e "const fs=require('fs'),path=require('path');function w(d,a=[]){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())w(p,a);else if(/\\.(js|css|html)$/.test(e.name))a.push(p);}return a;} const f=w('/src/apps/client/dist'); let r24=0,q=0,bar=0; for(const x of f){const s=fs.readFileSync(x,'utf8'); if(s.includes('data-gantt-ux')) r24++; if(s.includes('Toutes les personnes')) q++; if(s.includes('Bar fields')) bar++;} if(!r24) throw new Error('missing data-gantt-ux'); if(!q) throw new Error('missing quick filter locale'); if(bar) throw new Error('Bar fields still present'); console.log('r24 markers ok',{r24,q,bar});"; \
+check onepassword-logo test -f /src/apps/client/dist/icons/onepassword-logo.png; \
+check editor-ext-index test -f /src/packages/editor-ext/dist/index.js; \
+check onepassword-link-js test -f /src/packages/editor-ext/dist/lib/onepassword-link.js; \
+check task-dir test -d /src/apps/server/dist/core/task; \
+check task-module test -f /src/apps/server/dist/core/task/task.module.js; \
+check task-repos-dir test -d /src/apps/server/dist/database/repos/task; \
+check task-item-repo test -f /src/apps/server/dist/database/repos/task/task-item.repo.js; \
+check task-assignee-repo test -f /src/apps/server/dist/database/repos/task/task-assignee.repo.js; \
+check task-view-repo test -f /src/apps/server/dist/database/repos/task/task-view.repo.js; \
+check task-property-repo test -f /src/apps/server/dist/database/repos/task/task-property.repo.js; \
+check task-property-option-repo test -f /src/apps/server/dist/database/repos/task/task-property-option.repo.js; \
+check task-property-value-repo test -f /src/apps/server/dist/database/repos/task/task-property-value.repo.js; \
+check tasks-migration-v1 test -f /src/apps/server/dist/database/migrations/20260912T074500-tasks.js; \
+check tasks-migration-v2 test -f /src/apps/server/dist/database/migrations/20260912T120000-task-properties.js; \
+check tasks-migration-gantt test -f /src/apps/server/dist/database/migrations/20260913T120000-task-gantt-v1.js; \
+check client-gantt grep -R -a -F -q "Configurez les dates du Gantt" /src/apps/client/dist; \
+check client-gantt-milestone grep -R -a -F -q "data-gantt-milestone" /src/apps/client/dist; \
+check gantt-edit-marker grep -R -a -F -q "data-gantt-editable" /src/apps/client/dist; \
+check gantt-r26-marker grep -R -a -F -q "data-gantt-edit" /src/apps/client/dist; \
+check marker-1p-native grep -R -a -F -q "REDCORE_ONEPASSWORD_SMART_LINKS_NATIVE" /src/packages/editor-ext/dist; \
+check marker-onePasswordLink grep -R -a -F -q "onePasswordLink" /src/packages/editor-ext/dist; \
+check marker-convert grep -R -a -F -q "convertOnePasswordLinkNodesToLinkMarks" /src/packages/editor-ext/dist; \
+check marker-createdAt grep -R -a -F -q "onePasswordCreatedAt" /src/packages/editor-ext/dist; \
+check marker-data-attr grep -R -a -F -q "data-onepassword-created-at" /src/packages/editor-ext/dist; \
+check marker-mis-a-jour grep -R -a -F -q "Mis à jour le" /src/packages/editor-ext/dist; \
+check client-1p-url grep -R -a -F -q "start.1password.com/open/i" /src/apps/client/dist; \
+check client-1p-fr1 grep -R -a -F -q "Ajouter un lien vers un accès 1Password" /src/apps/client/dist; \
+check client-1p-fr2 grep -R -a -F -q "Ajouter un lien 1Password" /src/apps/client/dist; \
+check client-1p-del grep -R -a -F -q "Supprimer le lien" /src/apps/client/dist; \
+check marker-v39 grep -R -a -F -q "REDCORE_AICHAT_V39_CLIENT_NATIVE" /src/apps/client/dist; \
+check marker-v38 grep -R -a -F -q "REDCORE_AICHAT_V38_CLIENT_NATIVE" /src/apps/client/dist; \
+check contextSpaceSlug grep -R -a -F -q "contextSpaceSlug" /src/apps/client/dist/assets; \
+check tasks-label grep -R -a -F -q "\"Tasks\"" /src/apps/client/dist; \
+check all-tasks grep -R -a -F -q "All tasks" /src/apps/client/dist; \
+if [ "$fail" -ne 0 ]; then echo "OSS build checks FAILED"; exit 1; fi; \
+echo "OSS build OK: client+editor-ext+Tasks V1/V2 artefacts+1P+V38/V39"'
+
+
+FROM docmost/docmost@sha256:41c8d777cf23c74e78f94e676aec328b7d7856f48df5e573543dac68d371e37c
+
+USER root
+
+# Invariant: Hub EE must already be present before any overlay.
+RUN test -d /app/apps/server/dist/ee \
+ && test -f /app/apps/server/dist/ee/ee.module.js \
+ && test -d /app/apps/server/dist/ee/ai-chat \
+ && test -d /app/apps/server/dist/ee/base \
+ && test -d /app/apps/server/dist/ee/sso
+
+# Wipe Hub client/editor-ext artefacts so stale hashed assets cannot shadow the rebuild
+RUN rm -rf /app/apps/client/dist /app/packages/editor-ext/dist
+
+COPY --from=oss-builder /src/apps/client/dist /app/apps/client/dist
+COPY --from=oss-builder /src/packages/editor-ext/dist /app/packages/editor-ext/dist
+COPY --from=oss-builder /src/packages/editor-ext/package.json /app/packages/editor-ext/package.json
+
+# --- Tasks overlay ONLY (never copy full apps/server/dist) ---
+COPY --from=oss-builder /src/apps/server/dist/core/task /app/apps/server/dist/core/task
+COPY --from=oss-builder /src/apps/server/dist/database/repos/task /app/apps/server/dist/database/repos/task
+COPY --from=oss-builder /src/apps/server/dist/database/migrations/20260912T074500-tasks.js /app/apps/server/dist/database/migrations/20260912T074500-tasks.js
+COPY --from=oss-builder /src/apps/server/dist/database/migrations/20260912T074500-tasks.js.map /app/apps/server/dist/database/migrations/20260912T074500-tasks.js.map
+COPY --from=oss-builder /src/apps/server/dist/database/migrations/20260912T120000-task-properties.js /app/apps/server/dist/database/migrations/20260912T120000-task-properties.js
+COPY --from=oss-builder /src/apps/server/dist/database/migrations/20260912T120000-task-properties.js.map /app/apps/server/dist/database/migrations/20260912T120000-task-properties.js.map
+COPY --from=oss-builder /src/apps/server/dist/database/migrations/20260913T120000-task-gantt-v1.js /app/apps/server/dist/database/migrations/20260913T120000-task-gantt-v1.js
+COPY --from=oss-builder /src/apps/server/dist/database/migrations/20260913T120000-task-gantt-v1.js.map /app/apps/server/dist/database/migrations/20260913T120000-task-gantt-v1.js.map
+
+# Hub EE: allow Base view type `gantt` (additive; do not touch calendar).
+RUN node <<'EOF'
+const fs = require('fs');
+const p = '/app/apps/server/dist/ee/base/base.schemas.js';
+let s = fs.readFileSync(p, 'utf8');
+if (!s.includes("GANTT: 'gantt'")) {
+  const anchor = "    CALENDAR: 'calendar',\n};";
+  if (!s.includes(anchor)) {
+    throw new Error('STOP BUILD: BaseViewType CALENDAR anchor missing');
+  }
+  s = s.replace(
+    anchor,
+    "    CALENDAR: 'calendar',\n    GANTT: 'gantt',\n};",
+  );
+  fs.writeFileSync(p, s);
+}
+if (!fs.readFileSync(p, 'utf8').includes("GANTT: 'gantt'")) {
+  throw new Error('STOP BUILD: GANTT view type not patched into Hub EE');
+}
+console.log('Hub EE base.schemas: GANTT view type added');
+EOF
+
+# Register OnePasswordLink in Hub server collab schema (mirror Status/Mention).
+RUN node -e "\
+const fs=require('fs');\
+const p='/app/apps/server/dist/collaboration/collaboration.util.js';\
+let s=fs.readFileSync(p,'utf8');\
+if(!s.includes('OnePasswordLink')){\
+  if(!s.includes('editor_ext_1.Status')) throw new Error('Status anchor missing');\
+  s=s.replace('editor_ext_1.Status,','editor_ext_1.Status,\\n    editor_ext_1.OnePasswordLink,');\
+  fs.writeFileSync(p,s);\
+}\
+if(!fs.readFileSync(p,'utf8').includes('OnePasswordLink')) throw new Error('OnePasswordLink not registered');\
+console.log('collab schema: OnePasswordLink registered');\
+"
+
+# Wire TaskModule (once) + Task V1/V2 repos into Hub Nest modules (idempotent, strict anchors).
+RUN node <<'EOF'
+const fs = require('fs');
+
+function count(hay, needle) {
+  if (!needle) return 0;
+  let n = 0, i = 0;
+  while ((i = hay.indexOf(needle, i)) !== -1) { n++; i += needle.length; }
+  return n;
+}
+
+function requireExact(hay, needle, label) {
+  const n = count(hay, needle);
+  if (n !== 1) {
+    throw new Error(`STOP BUILD: anchor "${label}" expected exactly 1 match, got ${n}`);
+  }
+}
+
+function patchCore(path) {
+  let s = fs.readFileSync(path, 'utf8');
+  if (s.includes('TaskModule') && s.includes('./task/task.module')) {
+    const n = count(s, 'task_module_1.TaskModule');
+    if (n !== 1) {
+      throw new Error(`STOP BUILD: TaskModule import count expected 1, got ${n}`);
+    }
+    console.log('core.module.js: TaskModule already wired (exactly once)');
+    return;
+  }
+
+  const reqAnchor = 'const favorite_module_1 = require("./favorite/favorite.module");\nconst session_module_1 = require("./session/session.module");';
+  const reqInsert = 'const favorite_module_1 = require("./favorite/favorite.module");\nconst task_module_1 = require("./task/task.module");\nconst session_module_1 = require("./session/session.module");';
+  requireExact(s, reqAnchor, 'core require Favorite->Session');
+
+  const impAnchor = '            favorite_module_1.FavoriteModule,\n            search_module_1.SearchModule,';
+  const impInsert = '            favorite_module_1.FavoriteModule,\n            task_module_1.TaskModule,\n            search_module_1.SearchModule,';
+  requireExact(s, impAnchor, 'core imports Favorite->Search');
+
+  s = s.replace(reqAnchor, reqInsert).replace(impAnchor, impInsert);
+  fs.writeFileSync(path, s);
+
+  if (count(s, 'task_module_1.TaskModule') !== 1) {
+    throw new Error('STOP BUILD: TaskModule not present exactly once after core patch');
+  }
+  console.log('core.module.js: TaskModule wired');
+}
+
+function patchDatabaseV1(path) {
+  let s = fs.readFileSync(path, 'utf8');
+  if (
+    s.includes('TaskItemRepo') &&
+    s.includes('TaskAssigneeRepo') &&
+    s.includes('TaskViewRepo') &&
+    s.includes('./repos/task/task-item.repo')
+  ) {
+    console.log('database.module.js: Task V1 repos already wired');
+    return s;
+  }
+
+  const reqAnchor =
+    'const template_repo_1 = require("./repos/template/template.repo");\nconst page_listener_1 = require("./listeners/page.listener");';
+  const reqInsert =
+    'const template_repo_1 = require("./repos/template/template.repo");\n' +
+    'const task_item_repo_1 = require("./repos/task/task-item.repo");\n' +
+    'const task_assignee_repo_1 = require("./repos/task/task-assignee.repo");\n' +
+    'const task_view_repo_1 = require("./repos/task/task-view.repo");\n' +
+    'const page_listener_1 = require("./listeners/page.listener");';
+  requireExact(s, reqAnchor, 'database require Template->PageListener');
+
+  const providersAnchor =
+    '            template_repo_1.TemplateRepo,\n            page_listener_1.PageListener,';
+  const providersInsert =
+    '            template_repo_1.TemplateRepo,\n' +
+    '            task_item_repo_1.TaskItemRepo,\n' +
+    '            task_assignee_repo_1.TaskAssigneeRepo,\n' +
+    '            task_view_repo_1.TaskViewRepo,\n' +
+    '            page_listener_1.PageListener,';
+  requireExact(s, providersAnchor, 'database providers Template->PageListener');
+
+  const exportsAnchor = '            template_repo_1.TemplateRepo,\n        ],';
+  const exportsInsert =
+    '            template_repo_1.TemplateRepo,\n' +
+    '            task_item_repo_1.TaskItemRepo,\n' +
+    '            task_assignee_repo_1.TaskAssigneeRepo,\n' +
+    '            task_view_repo_1.TaskViewRepo,\n' +
+    '        ],';
+  requireExact(s, exportsAnchor, 'database exports Template closing');
+
+  s = s
+    .replace(reqAnchor, reqInsert)
+    .replace(providersAnchor, providersInsert)
+    .replace(exportsAnchor, exportsInsert);
+  fs.writeFileSync(path, s);
+  console.log('database.module.js: Task V1 repos wired');
+  return s;
+}
+
+function patchDatabaseV2(path) {
+  let s = fs.readFileSync(path, 'utf8');
+  if (
+    s.includes('TaskPropertyRepo') &&
+    s.includes('TaskPropertyOptionRepo') &&
+    s.includes('TaskPropertyValueRepo') &&
+    s.includes('./repos/task/task-property.repo')
+  ) {
+    console.log('database.module.js: Task V2 property repos already wired');
+    return s;
+  }
+
+  // V1 must already be present (wired above or by prior image).
+  if (!s.includes('task_view_repo_1') || !s.includes('TaskViewRepo')) {
+    throw new Error('STOP BUILD: cannot wire V2 repos — TaskViewRepo missing');
+  }
+
+  const reqAnchor =
+    'const task_view_repo_1 = require("./repos/task/task-view.repo");\nconst page_listener_1 = require("./listeners/page.listener");';
+  const reqInsert =
+    'const task_view_repo_1 = require("./repos/task/task-view.repo");\n' +
+    'const task_property_repo_1 = require("./repos/task/task-property.repo");\n' +
+    'const task_property_option_repo_1 = require("./repos/task/task-property-option.repo");\n' +
+    'const task_property_value_repo_1 = require("./repos/task/task-property-value.repo");\n' +
+    'const page_listener_1 = require("./listeners/page.listener");';
+  requireExact(s, reqAnchor, 'database require TaskView->PageListener');
+
+  const providersAnchor =
+    '            task_view_repo_1.TaskViewRepo,\n            page_listener_1.PageListener,';
+  const providersInsert =
+    '            task_view_repo_1.TaskViewRepo,\n' +
+    '            task_property_repo_1.TaskPropertyRepo,\n' +
+    '            task_property_option_repo_1.TaskPropertyOptionRepo,\n' +
+    '            task_property_value_repo_1.TaskPropertyValueRepo,\n' +
+    '            page_listener_1.PageListener,';
+  requireExact(s, providersAnchor, 'database providers TaskView->PageListener');
+
+  const exportsAnchor =
+    '            task_view_repo_1.TaskViewRepo,\n        ],';
+  const exportsInsert =
+    '            task_view_repo_1.TaskViewRepo,\n' +
+    '            task_property_repo_1.TaskPropertyRepo,\n' +
+    '            task_property_option_repo_1.TaskPropertyOptionRepo,\n' +
+    '            task_property_value_repo_1.TaskPropertyValueRepo,\n' +
+    '        ],';
+  requireExact(s, exportsAnchor, 'database exports TaskView closing');
+
+  s = s
+    .replace(reqAnchor, reqInsert)
+    .replace(providersAnchor, providersInsert)
+    .replace(exportsAnchor, exportsInsert);
+  fs.writeFileSync(path, s);
+
+  for (const name of [
+    'TaskPropertyRepo',
+    'TaskPropertyOptionRepo',
+    'TaskPropertyValueRepo',
+  ]) {
+    if (!s.includes(name)) {
+      throw new Error(`STOP BUILD: ${name} missing after V2 database patch`);
+    }
+  }
+  console.log('database.module.js: Task V2 property repos wired');
+  return s;
+}
+
+const corePath = '/app/apps/server/dist/core/core.module.js';
+const dbPath = '/app/apps/server/dist/database/database.module.js';
+patchCore(corePath);
+patchDatabaseV1(dbPath);
+patchDatabaseV2(dbPath);
+
+const core = fs.readFileSync(corePath, 'utf8');
+const db = fs.readFileSync(dbPath, 'utf8');
+if (count(core, 'task_module_1.TaskModule') !== 1) {
+  throw new Error('STOP BUILD: TaskModule must appear exactly once');
+}
+for (const name of [
+  'TaskItemRepo',
+  'TaskAssigneeRepo',
+  'TaskViewRepo',
+  'TaskPropertyRepo',
+  'TaskPropertyOptionRepo',
+  'TaskPropertyValueRepo',
+]) {
+  if (!db.includes(name)) throw new Error(`STOP BUILD: missing ${name}`);
+}
+if (!fs.existsSync('/app/apps/server/dist/ee/ee.module.js')) {
+  throw new Error('STOP BUILD: dist/ee/ee.module.js missing');
+}
+if (!fs.existsSync('/app/apps/server/dist/core/task/task.module.js')) {
+  throw new Error('STOP BUILD: task.module.js missing');
+}
+console.log('Tasks V1+V2 overlay wiring OK; Hub EE preserved');
+EOF
+
+# Post-checks (fail build if overlay or EE broken)
+RUN grep -q 'TaskModule' /app/apps/server/dist/core/core.module.js \
+ && test "$(grep -c 'task_module_1.TaskModule' /app/apps/server/dist/core/core.module.js)" = '1' \
+ && grep -q 'TaskItemRepo' /app/apps/server/dist/database/database.module.js \
+ && grep -q 'TaskAssigneeRepo' /app/apps/server/dist/database/database.module.js \
+ && grep -q 'TaskViewRepo' /app/apps/server/dist/database/database.module.js \
+ && grep -q 'TaskPropertyRepo' /app/apps/server/dist/database/database.module.js \
+ && grep -q 'TaskPropertyOptionRepo' /app/apps/server/dist/database/database.module.js \
+ && grep -q 'TaskPropertyValueRepo' /app/apps/server/dist/database/database.module.js \
+ && test -d /app/apps/server/dist/ee \
+ && test -f /app/apps/server/dist/ee/ee.module.js \
+ && test -d /app/apps/server/dist/ee/ai-chat \
+ && test -d /app/apps/server/dist/ee/base \
+ && test -d /app/apps/server/dist/ee/sso \
+ && test -f /app/apps/server/dist/database/migrations/20260912T074500-tasks.js \
+ && test -f /app/apps/server/dist/database/migrations/20260912T120000-task-properties.js \
+ && test -f /app/apps/server/dist/database/migrations/20260913T120000-task-gantt-v1.js \
+ && grep -q "GANTT: 'gantt'" /app/apps/server/dist/ee/base/base.schemas.js \
+ && ! test -d /app/apps/server/dist/ee.bak \
+ && echo "r21 invariants OK"
+
+RUN chown -R node:node \
+  /app/apps/client/dist \
+  /app/packages/editor-ext \
+  /app/apps/server/dist/collaboration/collaboration.util.js \
+  /app/apps/server/dist/core/core.module.js \
+  /app/apps/server/dist/database/database.module.js \
+  /app/apps/server/dist/core/task \
+  /app/apps/server/dist/database/repos/task \
+  /app/apps/server/dist/database/migrations/20260912T074500-tasks.js \
+  /app/apps/server/dist/database/migrations/20260912T074500-tasks.js.map \
+  /app/apps/server/dist/database/migrations/20260912T120000-task-properties.js \
+  /app/apps/server/dist/database/migrations/20260912T120000-task-properties.js.map \
+  /app/apps/server/dist/database/migrations/20260913T120000-task-gantt-v1.js \
+  /app/apps/server/dist/database/migrations/20260913T120000-task-gantt-v1.js.map \
+  /app/apps/server/dist/ee/base/base.schemas.js
+
+USER node
+
+CMD ["pnpm", "start"]
+
+LABEL org.opencontainers.image.source="https://github.com/REDCOREBE/docmost"
+LABEL org.redcore.docmost.upstream.tag="v0.95.0"
+LABEL org.redcore.docmost.image.version="0.95.0-r21-gantt-v1"
+LABEL org.redcore.docmost.build.path="C2-hybrid-tasks-gantt-v1"
+LABEL org.redcore.docmost.feature="tasks-gantt-v1,tasks-start-date,native-gantt-view"
+LABEL org.redcore.docmost.tasks.overlay="core/task,database/repos/task,migration-20260912T074500-tasks,migration-20260912T120000-task-properties,migration-20260913T120000-task-gantt-v1"
+LABEL org.redcore.docmost.tasks.invariant="KEEP_HUB_dist_ee;NEVER_COPY_FULL_server_dist;NO_PROD_DEPLOY"

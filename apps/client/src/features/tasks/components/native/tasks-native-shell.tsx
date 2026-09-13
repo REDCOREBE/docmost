@@ -520,6 +520,17 @@ export function TasksNativeShell({
       },
       openRow: (rowId) => onOpenRow(rowId),
       updateRowCells: async ({ rowId, cells }) => {
+        // Batch system field patches into a single Task update when possible
+        // (e.g. Gantt drag writes startDate + dueDate together).
+        const systemPatch: Record<string, unknown> = {};
+        const propertyUpdates: Array<{
+          propertyId: string;
+          valueText?: string | null;
+          valueNumber?: number | null;
+          valueTimestamptz?: string | null;
+          valueJson?: unknown | null;
+        }> = [];
+
         for (const [propertyId, value] of Object.entries(cells)) {
           const mutation = cellUpdateToTaskMutation(
             propertyId,
@@ -528,10 +539,26 @@ export function TasksNativeShell({
           );
           if (!mutation) continue;
           if (mutation.kind === "system") {
-            await updateTask.mutateAsync({ taskId: rowId, ...mutation.patch });
+            Object.assign(systemPatch, mutation.patch);
           } else {
-            await setPropertyValue.mutateAsync({ taskId: rowId, ...mutation });
+            propertyUpdates.push({
+              propertyId: mutation.propertyId,
+              valueText: mutation.valueText,
+              valueNumber: mutation.valueNumber,
+              valueTimestamptz: mutation.valueTimestamptz,
+              valueJson: mutation.valueJson,
+            });
           }
+        }
+
+        if (Object.keys(systemPatch).length > 0) {
+          await updateTask.mutateAsync({
+            taskId: rowId,
+            ...systemPatch,
+          });
+        }
+        for (const update of propertyUpdates) {
+          await setPropertyValue.mutateAsync({ taskId: rowId, ...update });
         }
       },
       deleteRow: async ({ rowId }) => {

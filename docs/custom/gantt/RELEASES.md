@@ -44,11 +44,26 @@ Delivered:
 Cutover: `2026-09-13T18:40:56+02:00` — **PRODUCTION PASS WITH WARNINGS** — **KEEP R24**  
 See [VALIDATION.md](./VALIDATION.md).
 
-## R23 — drag / resize (WIP, not deployed)
+## R23 — drag / resize (WIP, **rebased as R26**)
 
-- Stash / WIP: `r23-gantt-edit-wip` (branch `feature/tasks-r23-gantt-edit` historically pointed at R22 tip before R24 freeze)
-- Scope: drag / resize / milestone edit
+- Original stash: `stash@{1}` `r23-gantt-edit-wip` on `feature/tasks-r23-gantt-edit` (HEAD was R22 `33d82aee`; **0 unique commits**)
+- Rebased onto R24: branch `feature/tasks-r23-gantt-edit-rebased` — see R26 below
 - **NOT DEPLOYED**
-- **Must rebase onto R24** before any further work — [R23-REBASE-PLAN.md](./R23-REBASE-PLAN.md)
 
 Never merge Louise / Project B into R23 or R24 Gantt branches.
+
+## R26 — Gantt Edit Rebased (**CANDIDATE, not prod**)
+
+Branch: `feature/tasks-r23-gantt-edit-rebased`  
+Base: tag `docmost-r24-gantt-ux-prod` / `2cb717a5` + docs freeze `6ef199b7`
+
+Delivered on top of R24 UX:
+
+- Bar drag / resize / milestone edit (R23 KEEP, adapted to `effectivePxPerDay`)
+- Optimistic preview; one mutation per drop; native error toast + visual rollback
+- Tasks batch `sys:startDate` + `sys:dueDate`
+
+**Smoke image (Gantt source branch):** `redcore-docmost-c2:0.95.0-r26-gantt-edit-rebased-test`  
+**Prod cutover image (later):** must be an unpublished integration build = this branch **plus** Louise R25 client (`a527bd32`), because current prod already includes Louise. Do **not** cherry-pick Louise onto the Gantt branch.
+
+Never merge Louise / Project B into R23, R24, or R26 Gantt branches.

@@ -3,6 +3,7 @@ import type { FilterGroup, IBase, IBaseRow, IBaseView } from "@/ee/base/types/ba
 import { useBaseDataPorts } from "@/ee/base/context/base-data-ports";
 import { useRowDetailModal } from "@/ee/base/hooks/use-row-detail-modal";
 import { useUpdateViewMutation } from "@/ee/base/queries/base-view-query";
+import { useUpdateRowMutation } from "@/ee/base/queries/base-row-query";
 import { GanttView } from "@/ee/base/components/gantt/gantt-view";
 import type { GanttViewConfig } from "@/ee/base/types/base.types";
 
@@ -51,6 +52,7 @@ export function BaseGantt({
   const ports = useBaseDataPorts();
   const { openRow: openRowFromUrl } = useRowDetailModal(pageId);
   const updateView = useUpdateViewMutation();
+  const updateRow = useUpdateRowMutation();
 
   const handleOpenRow = useCallback(
     (rowId: string) => {
@@ -92,6 +94,23 @@ export function BaseGantt({
 
   useMigrateBarPropertyIds(view, pageId, editable, persistVisible);
 
+  const handleCommitDates = useCallback(
+    async ({
+      rowId,
+      cells,
+    }: {
+      rowId: string;
+      cells: Record<string, string | null>;
+    }) => {
+      if (!editable) return;
+      // useUpdateRowMutation routes Tasks through ports.updateRowCells
+      // (/api/tasks*) and Base through /api/bases*; native error toasts
+      // + Base cache rollback live in that mutation.
+      await updateRow.mutateAsync({ pageId, rowId, cells });
+    },
+    [editable, pageId, updateRow],
+  );
+
   return (
     <div style={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
       <GanttView
@@ -101,6 +120,7 @@ export function BaseGantt({
         editable={editable}
         onOpenRow={handleOpenRow}
         onGanttConfigChange={handleGanttConfigChange}
+        onCommitDates={editable ? handleCommitDates : undefined}
       />
     </div>
   );

@@ -64,11 +64,37 @@ Quick filters and view switching on `/tasks` must not call Base APIs. Validation
 - `gantt-scale.ts`: `effectivePxPerDay` fills container; horizontal scroll when range is large
 - Grid / body continues vertically (full-height polish from R22 retained)
 
+## R26 pointer edit (candidate, not prod)
+
+Rebased R23 WIP onto R24. Shared `GanttView` interactions:
+
+| Gesture | Effect |
+|---------|--------|
+| Bar drag | start + due +N days (duration preserved) |
+| Resize left / right | start only / due only; clamp `start <= due` |
+| Milestone drag | start-only / due-only / same-day; never converts to a bar |
+
+Implementation:
+
+- `gantt-edit.ts` — calendar-day math (`Date#setDate`, not +24h)
+- `use-gantt-pointer-edit.ts` — preview locally; **one mutation on drop**
+- Pixel → day uses the **current** `effectivePxPerDay` (R24 EPMF), captured at pointer-down
+- Timeline scale is computed from **committed** rows (`datedRaw`), so a preview cannot retune px/day mid-drag
+- Tasks: `updateRowCells` batches `startDate`+`dueDate` into **one** `/api/tasks*` update
+- Base: `useUpdateRowMutation` → `/api/bases*`
+- Read-only: no grab, no handles, no mutation
+- Keyboard date nudging: **not in V1** (handles `tabIndex={-1}`); Enter still opens RowDetail
+- No edge auto-scroll during drag (manual scroll still works; `touch-action: none` on the bar)
+
+Does **not** touch `visiblePropertyIds`, `propertyOrder`, quick-filter URL, or `task_views`.
+
 ## Principal source files (R24)
 
 ```
 apps/client/src/ee/base/components/gantt/gantt-view.tsx
 apps/client/src/ee/base/components/gantt/base-gantt.tsx
+apps/client/src/ee/base/components/gantt/gantt-edit.ts
+apps/client/src/ee/base/components/gantt/use-gantt-pointer-edit.ts
 apps/client/src/ee/base/components/gantt/gantt-bar-label.ts
 apps/client/src/ee/base/components/gantt/gantt-date-provision.ts
 apps/client/src/ee/base/components/gantt/gantt-scale.ts

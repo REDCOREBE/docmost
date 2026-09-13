@@ -57,8 +57,11 @@ Details: [ARCHITECTURE.md](./ARCHITECTURE.md)
 | Commit | see [RELEASES.md](./RELEASES.md) |
 | IMAGE | `redcore-docmost-c2:0.95.0-r24-gantt-ux-test` |
 | DIGEST | `sha256:4d3badc239478f641993f2c52950d4ab8d0eb099ce1b70a31a193c4ca1e4250a` |
-| Previous rollback image | `redcore-docmost-c2:0.95.0-r22-gantt-polish-final` |
-| R23 drag/resize | **NOT DEPLOYED** — rebase onto R24 later ([R23-REBASE-PLAN.md](./R23-REBASE-PLAN.md)) |
+| Previous rollback image | `redcore-docmost-c2:0.95.0-r22-gantt-polish-final` (Gantt-only; **do not use** after Louise R25 — would drop Projet B) |
+| Combined prod image (Gantt R24 + Louise R25) | `redcore-docmost-c2:0.95.0-r25-louise-context-usage-final` |
+| R26 drag/resize | **CANDIDATE, NOT DEPLOYED** — [R23-REBASE-PLAN.md](./R23-REBASE-PLAN.md) |
+
+R26 also adds pointer edit (drag / resize / milestone) on top of the R24 surface. Keyboard date nudging is V1.2.
 
 Cutover validation: [VALIDATION.md](./VALIDATION.md)  
 Rollback: [ROLLBACK.md](./ROLLBACK.md)  

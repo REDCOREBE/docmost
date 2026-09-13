@@ -58,3 +58,19 @@ None of these warnings required rollback.
 ## Monitoring
 
 15 cycles × 2 minutes (`2026-09-13T18:47:38+02:00` → `19:15:45+02:00`): all `/`, `/login`, `/tasks`, space tasks HTTP 200; RestartCount 0; DB/Redis/CF OK.
+
+## R26 — Gantt Edit Rebased (candidate validation)
+
+**NOT A PROD CUTOVER.** Isolated smoke only.
+
+| Field | Value |
+|-------|-------|
+| RESULT | see closing report in chat |
+| Base | `2cb717a5` / `docmost-r24-gantt-ux-prod` |
+| Branch | `feature/tasks-r23-gantt-edit-rebased` |
+| Unit tests | `gantt-edit.spec.ts` + R24 suites — 41 passed |
+| Image | `redcore-docmost-c2:0.95.0-r26-gantt-edit-rebased-test` |
+| Limitations | No keyboard date nudge (V1.2). No edge auto-scroll. Headless SSO not used for full UI matrix; unit + isolated smoke. |
+
+R24 regression expected to remain: quick filters, dirty=false, card properties, auto-dates, EPMF, Table/Kanban. Drag must use `effectivePxPerDay`.
+

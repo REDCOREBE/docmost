@@ -23,6 +23,11 @@ import {
   resolveBarExtras,
   resolveEffectiveBarPropertyIds,
 } from "./gantt-bar-label";
+import {
+  applyPreviewToDated,
+  useGanttPointerEdit,
+  type GanttCommitDates,
+} from "./use-gantt-pointer-edit";
 import classes from "./gantt.module.css";
 
 const VIRTUALIZE_THRESHOLD = 40;
@@ -37,6 +42,8 @@ export type GanttViewProps = {
   editable?: boolean;
   onOpenRow?: (rowId: string) => void;
   onGanttConfigChange?: (gantt: GanttViewConfig) => void;
+  /** Persist start/end date cells (Tasks ports or Base updateRow). */
+  onCommitDates?: GanttCommitDates;
 };
 
 function defaultGanttConfig(
@@ -195,6 +202,7 @@ export function GanttView({
   editable = false,
   onOpenRow,
   onGanttConfigChange,
+  onCommitDates,
 }: GanttViewProps) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -229,7 +237,23 @@ export function GanttView({
   const visiblePropertyIds = viewConfig.visiblePropertyIds;
   const propertyOrder = viewConfig.propertyOrder;
 
-  const { dated, undatedCount } = useMemo(() => {
+  const {
+    preview,
+    dragging,
+    canEdit,
+    beginEdit,
+    shouldSuppressClick,
+    clearPreviewIfSynced,
+  } = useGanttPointerEdit({
+    editable: editable && configured,
+    startPropertyId: gantt?.startPropertyId ?? "",
+    endPropertyId: gantt?.endPropertyId ?? "",
+    onCommitDates,
+  });
+  const draggingRef = useRef(false);
+  draggingRef.current = dragging;
+
+  const { dated: datedRaw, undatedCount } = useMemo(() => {
     if (!configured || !gantt)
       return { dated: [] as GanttDatedRow[], undatedCount: 0 };
     const next: GanttDatedRow[] = [];
@@ -246,6 +270,16 @@ export function GanttView({
     return { dated: next, undatedCount: missing };
   }, [rows, configured, gantt]);
 
+  const dated = useMemo(
+    () => applyPreviewToDated(datedRaw, preview),
+    [datedRaw, preview],
+  );
+
+  useEffect(() => {
+    if (dragging) return;
+    clearPreviewIfSynced(datedRaw);
+  }, [datedRaw, clearPreviewIfSynced, dragging]);
+
   const {
     rangeStart,
     dayCount,
@@ -255,11 +289,13 @@ export function GanttView({
   } = useMemo(
     () =>
       computeFilledTimeline({
-        dated,
+        // Scale from committed rows only so a drag preview cannot
+        // retune effectivePxPerDay / rangeStart mid-gesture (R24 EPMF).
+        dated: datedRaw,
         zoom,
         containerWidthPx: containerWidth,
       }),
-    [dated, zoom, containerWidth],
+    [datedRaw, zoom, containerWidth],
   );
   const { months, days } = useMemo(
     () => buildHeaders(rangeStart, dayCount, zoom),
@@ -284,6 +320,7 @@ export function GanttView({
     if (!el) return;
 
     const measure = () => {
+      if (draggingRef.current) return;
       const header = el.querySelector("[data-gantt-header]");
       const headerH = header?.getBoundingClientRect().height ?? 46;
       setBodyMinHeight(Math.max(0, el.clientHeight - headerH));
@@ -316,7 +353,13 @@ export function GanttView({
   const bodyHeight = Math.max(contentHeight, bodyMinHeight);
 
   return (
-    <div className={classes.root} data-gantt-root data-gantt-ux="r24" data-gantt-zoom={zoom}>
+    <div
+      className={classes.root}
+      data-gantt-root
+      data-gantt-ux="r24"
+      data-gantt-edit="r26"
+      data-gantt-zoom={zoom}
+    >
       {(undatedCount > 0 || clamped) && (
         <div className={classes.metaBar}>
           {undatedCount > 0 && (
@@ -427,6 +470,10 @@ export function GanttView({
                       visiblePropertyIds={visiblePropertyIds}
                       propertyOrder={propertyOrder}
                       onOpenRow={onOpenRow}
+                      canEdit={canEdit}
+                      dragging={dragging && preview?.rowId === item.row.id}
+                      onBeginEdit={beginEdit}
+                      shouldSuppressClick={shouldSuppressClick}
                     />
                   );
                 })
@@ -442,6 +489,10 @@ export function GanttView({
                     visiblePropertyIds={visiblePropertyIds}
                     propertyOrder={propertyOrder}
                     onOpenRow={onOpenRow}
+                    canEdit={canEdit}
+                    dragging={dragging && preview?.rowId === item.row.id}
+                    onBeginEdit={beginEdit}
+                    shouldSuppressClick={shouldSuppressClick}
                   />
                 ))}
           </div>
@@ -461,6 +512,10 @@ function GanttBarRow({
   visiblePropertyIds,
   propertyOrder,
   onOpenRow,
+  canEdit,
+  dragging,
+  onBeginEdit,
+  shouldSuppressClick,
 }: {
   item: GanttDatedRow;
   top: number;
@@ -471,6 +526,15 @@ function GanttBarRow({
   visiblePropertyIds?: string[];
   propertyOrder?: string[];
   onOpenRow?: (rowId: string) => void;
+  canEdit: boolean;
+  dragging: boolean;
+  onBeginEdit: (
+    e: React.PointerEvent,
+    item: GanttDatedRow,
+    mode: "drag" | "resize-left" | "resize-right" | "milestone",
+    dayWidth: number,
+  ) => void;
+  shouldSuppressClick: () => boolean;
 }) {
   const title = resolveTitle(item.row, properties);
   const enabledBarPropIds = resolveEffectiveBarPropertyIds({
@@ -482,6 +546,11 @@ function GanttBarRow({
   const progress = resolveProgress(item.row, properties, enabledBarPropIds);
   const style = resolveBarStyle(item.row, properties);
 
+  const open = () => {
+    if (shouldSuppressClick()) return;
+    onOpenRow?.(item.row.id);
+  };
+
   if (item.kind === "milestone") {
     const left = dayIndex(rangeStart, item.start) * dayWidth + dayWidth / 2;
     const showLabel = dayWidth >= 18;
@@ -492,24 +561,32 @@ function GanttBarRow({
         data-gantt-row={item.row.id}
         data-gantt-kind="milestone"
       >
-        <div
-          className={classes.milestoneWrap}
-          style={{ left }}
-        >
+        <div className={classes.milestoneWrap} style={{ left }}>
           <button
             type="button"
-            className={classes.milestone}
+            className={[
+              classes.milestone,
+              canEdit ? classes.editable : "",
+              dragging ? classes.dragging : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             style={style}
-            onClick={() => onOpenRow?.(item.row.id)}
+            onClick={open}
+            onPointerDown={(e) => {
+              if (!canEdit) return;
+              onBeginEdit(e, item, "milestone", dayWidth);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                onOpenRow?.(item.row.id);
+                open();
               }
             }}
             title={title}
             aria-label={title}
             data-gantt-milestone={item.row.id}
+            data-gantt-editable={canEdit ? "true" : "false"}
           />
           {showLabel && (
             <span className={classes.milestoneLabel} aria-hidden>
@@ -542,17 +619,29 @@ function GanttBarRow({
     >
       <button
         type="button"
-        className={classes.bar}
+        className={[
+          classes.bar,
+          canEdit ? classes.editable : "",
+          dragging ? classes.dragging : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         style={{
           left: left + 2,
           width: barWidth,
           ...style,
         }}
-        onClick={() => onOpenRow?.(item.row.id)}
+        onClick={open}
+        onPointerDown={(e) => {
+          if (!canEdit) return;
+          const target = e.target as HTMLElement;
+          if (target.closest("[data-gantt-resize]")) return;
+          onBeginEdit(e, item, "drag", dayWidth);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onOpenRow?.(item.row.id);
+            open();
           }
         }}
         title={
@@ -560,7 +649,38 @@ function GanttBarRow({
         }
         aria-label={title}
         data-gantt-bar={item.row.id}
+        data-gantt-editable={canEdit ? "true" : "false"}
       >
+        {canEdit && (
+          <>
+            <span
+              className={classes.resizeHandle}
+              data-gantt-resize="left"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize start date"
+              tabIndex={-1}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onBeginEdit(e, item, "resize-left", dayWidth);
+              }}
+            />
+            <span
+              className={[classes.resizeHandle, classes.resizeHandleRight].join(
+                " ",
+              )}
+              data-gantt-resize="right"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize due date"
+              tabIndex={-1}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onBeginEdit(e, item, "resize-right", dayWidth);
+              }}
+            />
+          </>
+        )}
         {progress != null && progress > 0 && (
           <span
             className={classes.barProgress}
