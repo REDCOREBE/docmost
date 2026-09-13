@@ -1,0 +1,74 @@
+# Isolated smoke for R26 Gantt Edit Rebased — NOT production.
+# Host port: 3012 (prod 3000 untouched). Dedicated volumes.
+#
+# Image is built from an unpublished integrate worktree:
+#   Gantt commit 4a5d8484 + Louise client a527bd32 (not on the Gantt branch).
+#
+# Usage:
+#   set -a; source /opt/docmost/.env; set +a
+#   docker compose -p docmost-tasks-r26-gantt-edit-smoke \
+#     -f docs/custom/gantt/docker-compose.r26-gantt-edit-smoke.yml up -d
+#
+# Do not use this file against prod compose.
+
+services:
+  docmost:
+    image: redcore-docmost-c2:0.95.0-r26-gantt-edit-rebased-test
+    depends_on:
+      - db
+      - redis
+    environment:
+      APP_URL: http://127.0.0.1:3012
+      APP_SECRET: ${APP_SECRET}
+      DATABASE_URL: postgresql://docmost:${DB_PASSWORD}@db:5432/docmost
+      REDIS_URL: redis://redis:6379
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
+    ports:
+      - "127.0.0.1:3012:3000"
+    volumes:
+      - smoke_r26_gantt_docmost_data:/app/data/storage
+      - /opt/docmost/patch-license.js:/opt/patches/patch-license.js:ro
+      - /opt/docmost/patch-features.js:/opt/patches/patch-features.js:ro
+      - /opt/docmost/patch-aichat.js:/opt/patches/patch-aichat.js:ro
+      - /opt/docmost/patch-service-guard.js:/opt/patches/patch-service-guard.js:ro
+      - /opt/docmost/patch-aichat-limits.js:/opt/patches/patch-aichat-limits.js:ro
+      - /opt/docmost/patch-aichat-context.js:/opt/patches/patch-aichat-context.js:ro
+      - /opt/docmost/patch-aichat-v3.js:/opt/patches/patch-aichat-v3.js:ro
+      - /opt/docmost/patch-aichat-v34.js:/opt/patches/patch-aichat-v34.js:ro
+      - /opt/docmost/patch-aichat-v35.js:/opt/patches/patch-aichat-v35.js:ro
+      - /opt/docmost/patch-aichat-v36.js:/opt/patches/patch-aichat-v36.js:ro
+      - /opt/docmost/patch-aichat-v37.js:/opt/patches/patch-aichat-v37.js:ro
+      - /opt/docmost/patch-aichat-v38.js:/opt/patches/patch-aichat-v38.js:ro
+      - /opt/docmost/patch-aichat-v381.js:/opt/patches/patch-aichat-v381.js:ro
+      - /opt/docmost/patch-aichat-v39.js:/opt/patches/patch-aichat-v39.js:ro
+      - /opt/docmost/patch-aichat-tools.js:/opt/patches/patch-aichat-tools.js:ro
+      - /opt/docmost/patch-aichat-tool-errors.js:/opt/patches/patch-aichat-tool-errors.js:ro
+      - /opt/docmost/patch-aichat-onepassword-redact.js:/opt/patches/patch-aichat-onepassword-redact.js:ro
+      - /opt/docmost/patch-aichat-context-usage.js:/opt/patches/patch-aichat-context-usage.js:ro
+      - /opt/docmost/patch-entitlements.js:/opt/patches/patch-entitlements.js:ro
+      - /opt/docmost/patch-logo.js:/opt/patches/patch-logo.js:ro
+    command: >
+      sh -c "node /opt/patches/patch-license.js && node /opt/patches/patch-features.js && node /opt/patches/patch-aichat.js && node /opt/patches/patch-aichat-limits.js && node /opt/patches/patch-aichat-context.js && node /opt/patches/patch-aichat-v3.js && node /opt/patches/patch-aichat-v34.js && node /opt/patches/patch-aichat-v35.js && node /opt/patches/patch-aichat-v36.js && node /opt/patches/patch-aichat-v37.js && node /opt/patches/patch-aichat-v38.js && node /opt/patches/patch-aichat-v381.js && node /opt/patches/patch-aichat-v39.js && node /opt/patches/patch-aichat-tools.js && node /opt/patches/patch-aichat-tool-errors.js && node /opt/patches/patch-aichat-onepassword-redact.js && node /opt/patches/patch-aichat-context-usage.js && node /opt/patches/patch-entitlements.js && node /opt/patches/patch-logo.js && pnpm start"
+    restart: "no"
+
+  db:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: docmost
+      POSTGRES_USER: docmost
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - smoke_r26_gantt_db_data:/var/lib/postgresql
+    restart: "no"
+
+  redis:
+    image: redis:8
+    command: [redis-server, --appendonly, yes, --maxmemory-policy, noeviction]
+    volumes:
+      - smoke_r26_gantt_redis_data:/data
+    restart: "no"
+
+volumes:
+  smoke_r26_gantt_docmost_data:
+  smoke_r26_gantt_db_data:
+  smoke_r26_gantt_redis_data:

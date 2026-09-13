@@ -53,7 +53,7 @@ check tasks-migration-gantt test -f /src/apps/server/dist/database/migrations/20
 check client-gantt grep -R -a -F -q "Configurez les dates du Gantt" /src/apps/client/dist; \
 check client-gantt-milestone grep -R -a -F -q "data-gantt-milestone" /src/apps/client/dist; \
 check gantt-edit-marker grep -R -a -F -q "data-gantt-editable" /src/apps/client/dist; \
-check gantt-r26-marker grep -R -a -F -q "data-gantt-edit" /src/apps/client/dist; \
+check gantt-r26-marker grep -R -a -F -q "data-gantt-edit=" /src/apps/client/dist; \
 check marker-1p-native grep -R -a -F -q "REDCORE_ONEPASSWORD_SMART_LINKS_NATIVE" /src/packages/editor-ext/dist; \
 check marker-onePasswordLink grep -R -a -F -q "onePasswordLink" /src/packages/editor-ext/dist; \
 check marker-convert grep -R -a -F -q "convertOnePasswordLinkNodesToLinkMarks" /src/packages/editor-ext/dist; \
